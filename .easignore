@@ -1,0 +1,33 @@
+# EAS upload ignore. 本目录不是 git 仓库，没有 .easignore 时会把 node_modules(460M) 一起传上去。
+# 注意：.env.local 必须上传，EXPO_PUBLIC_SUPABASE_* 是构建时内联进 bundle 的公开 key；
+# 下面的 env 规则只排掉备份文件。
+
+node_modules/
+.expo/
+dist/
+web-build/
+supabase/.temp/
+
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+.DS_Store
+*.pem
+
+.env.local.bak*
+.env*.backup
+
+*.tsbuildinfo
+
+/ios
+/android

@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "好好吃饭",
+    "slug": "haohao-chifan",
+    "scheme": "haohaochifan",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wenxin.haohaochifan"
+    },
+    "android": {
+      "package": "com.wenxin.haohaochifan",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFEFA",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true,
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sharing",
+      "expo-notifications",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "374b111b-9b55-4d87-9509-efbde6d019d7"
+      }
+    },
+    "owner": "ethanwen"
+  }
+}
