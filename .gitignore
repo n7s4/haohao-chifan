@@ -42,3 +42,9 @@ yarn-error.*
 
 # local env backups
 .env.local.bak*
+
+# signing material — never commit / never upload to EAS
+*.jks
+*.keystore
+credentials.json
+keystore-backup*
