@@ -17,8 +17,8 @@ import { markPendingReconcile } from "../lib/sync/reconcile";
 import { resumeOutbox } from "../lib/sync/outbox";
 import type { LocalState } from "../lib/sync/merge";
 import { hasContent, mergeGuestIntoAccount } from "../lib/sync/guestMerge";
-import type { RecipeStep } from "../lib/steps";
-import { adoptLocalMedia, cachedMediaFile, uploadMedia } from "../lib/media";
+import { persistableImage, persistableSteps, type RecipeStep, type StepImage } from "../lib/steps";
+import { adoptLocalMedia, cachedMediaFile, removeRecipeMedia, uploadMedia } from "../lib/media";
 import { seedFromLocal } from "../lib/sync/bootstrap";
 import { queueReplaceAll } from "../lib/sync/replaceAll";
 import {
@@ -40,6 +40,8 @@ export type CustomRecipeInput = {
   /** 调料：存进同一份 ingredients，带 section 标记，单独一区展示、不进采购清单。 */
   seasonings?: { name: string; qty: number | null; unit: string }[];
   steps: RecipeStep[];
+  /** 成品图（封面）。选完图先带 localUri，保存时由 store 搬进缓存目录。 */
+  cover?: StepImage | null;
 };
 
 /** 主料 + 调料合并进同一份 ingredients，调料打 section 标记。名称空的整行丢掉。 */
@@ -66,7 +68,8 @@ function normalizeCustomInput(input: CustomRecipeInput) {
     : [{ text: "按自己的做法把这道菜做完。" }];
   const name = input.name.trim();
   if (!name || !ingredients.length) return null;
-  return { name, ingredients, steps, minutes: input.minutes ?? 0 };
+  const cover = input.cover?.id ? input.cover : undefined;
+  return { name, ingredients, steps, minutes: input.minutes ?? 0, cover };
 }
 
 export type ShoppingItem = {
@@ -167,6 +170,8 @@ type Store = {
   createRecipe: (input: CustomRecipeInput) => Recipe | null;
   /** 只能改自建菜；内置/他人菜谱一律返回 null，UI 也不给入口。 */
   updateRecipe: (id: string, input: CustomRecipeInput) => Recipe | null;
+  /** 只删自建菜：内置菜和别人的菜不在 customRecipes 里，返回 false。 */
+  deleteRecipe: (id: string) => boolean;
   shoppingItems: ShoppingItem[];
   trippedCount: number;
   toggleChecked: (id: string) => void;
@@ -219,6 +224,8 @@ type Store = {
   /** 登录时发现本机有未并入的游客改动，等用户选一次 */
   guestMerge: { planCount: number; favoriteCount: number; manualCount: number } | null;
   resolveGuestMerge: (merge: boolean) => void;
+  /** 「我的」页点「合并本机数据」：把游客快照重新弹出来 */
+  reopenGuestMerge: () => Promise<void>;
   /** 用户选了「先不并」：游客那份仍只在本机，需要在「我的」页常驻提示 */
   guestLocalOnly: boolean;
 };
@@ -328,7 +335,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const cookedLogRef = useRef<{ date: string; recipeId: string }[]>([]);
   const customRecipesRef = useRef<Recipe[]>([]);
   /** 补传图片要等下文的 pushRecipe 定义，这里用 ref 接住，避免声明顺序打架。 */
-  const flushMediaRef = useRef<((userId: string) => Promise<void>) | null>(null);
+  const flushMediaRef = useRef<
+    ((userId: string, options?: { recipeId?: string; budget?: number }) => Promise<void>) | null
+  >(null);
   /** 本地写计数：同步返回时如果变了，说明用户已经又改了，丢弃这次合并结果。 */
   const mutationCount = useRef(0);
   /** 云端队列只做「尽力而为」：写失败不影响本地交互，下次联网再补。 */
@@ -775,6 +784,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           calories: recipe.calories,
           heat: recipe.heat,
           art: recipe.art,
+          cover: recipe.cover,
           tips: recipe.tips,
           stepMinutes: recipe.stepMinutes,
         })
@@ -783,13 +793,32 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const flushPendingMedia = useCallback(
-    async (userId: string) => {
-      let budget = 6;
+    async (userId: string, options?: { recipeId?: string; budget?: number }) => {
+      let budget = options?.budget ?? 6;
       const updated: Recipe[] = [];
 
       for (const recipe of customRecipesRef.current) {
         if (budget <= 0) break;
+        // 刚保存的那条优先传完（封面 + 全部步骤图），别和其它菜挤同一个 6 张额度。
+        if (options?.recipeId && recipe.id !== options.recipeId) continue;
         let changed = false;
+        let cover = recipe.cover;
+        // 封面和步骤图同一套逻辑：path 为空但本地有文件 → 传上去、回写 path。
+        if (cover && !cover.path && budget > 0) {
+          const ref = { userId, recipeId: recipe.id, imageId: cover.id };
+          const file = cachedMediaFile(ref);
+          if (file) {
+            try {
+              const path = await uploadMedia(ref, file.uri);
+              await adoptLocalMedia(ref, file.uri);
+              cover = { ...cover, path };
+              budget -= 1;
+              changed = true;
+            } catch {
+              // 同上：下一轮再试。
+            }
+          }
+        }
         const steps: RecipeStep[] = [];
 
         for (const step of recipe.steps) {
@@ -824,7 +853,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           steps.push({ ...step, images: nextImages });
         }
 
-        if (changed) updated.push({ ...recipe, steps });
+        if (changed) updated.push({ ...recipe, steps, ...(cover ? { cover } : {}) });
       }
 
       if (!updated.length) return;
@@ -837,7 +866,49 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     },
     [pushRecipe]
   );
-  flushMediaRef.current = flushPendingMedia;
+  useEffect(() => {
+    flushMediaRef.current = flushPendingMedia;
+  }, [flushPendingMedia]);
+
+  /**
+   * 选完图那一刻，文件还在 picker 的临时目录里，图片对象上挂着 `localUri`。
+   * 这串地址换台设备就是死链，所以必须尽早搬进缓存目录：
+   * `document/recipe-media/{userId|guest}/{recipeId}/{imageId}.jpg`。
+   *
+   * 搬完就把 `localUri` 去掉——之后 flushPendingMedia 只靠「缓存目录里有没有
+   * 这个 imageId」就能补传，不依赖任何被持久化的 file://。
+   */
+  const adoptDraftMedia = useCallback(async (recipe: Recipe): Promise<Recipe | null> => {
+    const hasLocal = Boolean(recipe.cover?.localUri) ||
+      recipe.steps.some((step) => step.images?.some((image) => image.localUri));
+    if (!hasLocal) return null;
+    const userId = await getCurrentUserId();
+    const adopt = async (image: StepImage): Promise<StepImage> => {
+      if (!image.localUri) return image;
+      const adopted = await adoptLocalMedia(
+        { userId, recipeId: recipe.id, imageId: image.id },
+        image.localUri
+      );
+      // 搬失败（Web 无 documentDirectory、临时文件已被系统回收）就保留 localUri，
+      // 至少这一轮还能显示、还能再试；直接抹掉等于图永远找不回来了。
+      if (!adopted) return image;
+      const rest = { ...image };
+      delete rest.localUri;
+      return rest;
+    };
+    const cover = recipe.cover ? await adopt(recipe.cover) : undefined;
+    const steps: RecipeStep[] = [];
+    for (const step of recipe.steps) {
+      if (!step.images?.length) {
+        steps.push(step);
+        continue;
+      }
+      const images: StepImage[] = [];
+      for (const image of step.images) images.push(await adopt(image));
+      steps.push({ ...step, images });
+    }
+    return { ...recipe, ...(cover ? { cover } : {}), steps };
+  }, []);
 
   /**
    * 新建自建菜。内置菜只读，绝不覆盖；id 带 `custom-` 前缀，云端按 (user_id,id)
@@ -861,9 +932,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setCustomRecipes((current) => [recipe, ...current]);
       customRecipesRef.current = [recipe, ...customRecipesRef.current];
       pushRecipe(recipe);
+      // 选过图的先落盘再重推一次：这条推送才带得上云端 path。
+      void adoptDraftMedia(recipe).then(async (adopted) => {
+        // 没有可搬的图也照样立刻 flush：游客态刚登录、断网后补传都靠这一下。
+        const next = adopted ?? recipe;
+        if (adopted) {
+          customRecipesRef.current = customRecipesRef.current.map((item) =>
+            item.id === adopted.id ? adopted : item
+          );
+          setCustomRecipes(customRecipesRef.current);
+          pushRecipe(adopted);
+        }
+        const userId = await getCurrentUserId();
+        if (userId) await flushMediaRef.current?.(userId, { recipeId: next.id, budget: 200 });
+      });
       return recipe;
     },
-    [pushRecipe]
+    [adoptDraftMedia, pushRecipe]
   );
 
   /**
@@ -881,11 +966,77 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       customRecipesRef.current = next;
       setCustomRecipes(next);
       pushRecipe(recipe);
+      void adoptDraftMedia(recipe).then(async (adopted) => {
+        // 没有可搬的图也照样立刻 flush：游客态刚登录、断网后补传都靠这一下。
+        const next = adopted ?? recipe;
+        if (adopted) {
+          customRecipesRef.current = customRecipesRef.current.map((item) =>
+            item.id === adopted.id ? adopted : item
+          );
+          setCustomRecipes(customRecipesRef.current);
+          pushRecipe(adopted);
+        }
+        const userId = await getCurrentUserId();
+        if (userId) await flushMediaRef.current?.(userId, { recipeId: next.id, budget: 200 });
+      });
       return recipe;
     },
-    [pushRecipe]
+    [adoptDraftMedia, pushRecipe]
   );
 
+  /**
+   * 删除自建菜：本地移除 + 云端写 tombstone（deleted=true，别的设备 pull 时据此删掉）。
+   * 顺手撤掉计划里排了这道菜的餐位、取消收藏，并清掉本机缓存和 Storage 里的图。
+   * 做饭记录和评分留着：那是历史，删菜不该改写。
+   */
+  const deleteRecipe = useCallback(
+    (id: string) => {
+      const current = customRecipesRef.current.find((recipe) => recipe.id === id);
+      if (!current) return false;
+      const next = customRecipesRef.current.filter((recipe) => recipe.id !== id);
+      customRecipesRef.current = next;
+      setCustomRecipes(next);
+      pushRemote((userId) =>
+        queueRecipe({ userId, id, name: current.name, ingredients: [], steps: [], deleted: true })
+      );
+
+      const slots: { dateKey: string; slot: MealSlot }[] = [];
+      const nextPlan: PlanMap = {};
+      for (const [dateKey, day] of Object.entries(planRef.current)) {
+        const kept = { ...day };
+        for (const [slot, recipeId] of Object.entries(day)) {
+          if (recipeId !== id) continue;
+          delete kept[slot as MealSlot];
+          slots.push({ dateKey, slot: slot as MealSlot });
+        }
+        nextPlan[dateKey] = kept;
+      }
+      if (slots.length) {
+        planRef.current = nextPlan;
+        setPlan(nextPlan);
+        pushRemote((userId) =>
+          Promise.all(
+            slots.map((item) => queuePlanSlot({ userId, dayKey: item.dateKey, slot: item.slot, recipeId: null }))
+          ).then(() => undefined)
+        );
+      }
+
+      if (favoritesRef.current.includes(id)) {
+        favoritesRef.current = favoritesRef.current.filter((item) => item !== id);
+        setFavorites(favoritesRef.current);
+        pushRemote((userId) => queuePrefs({ userId, recipeId: id, favorite: false }));
+      }
+
+      void (async () => {
+        const userId = await getCurrentUserId();
+        await removeRecipeMedia({ userId, recipeId: id });
+        // 游客期建的菜图片在 guest/ 目录，登录后删也要清。
+        if (userId) await removeRecipeMedia({ userId: null, recipeId: id });
+      })();
+      return true;
+    },
+    [pushRemote]
+  );
 
   const setMeal = useCallback((dateKey: string, slot: MealSlot, recipeId: string | null) => {
     setPlan((current) => {
@@ -1244,7 +1395,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ratings,
       servings,
       cookedLog,
-      customRecipes,
+      // 备份里也只能有 path：localUri 换台设备就是死链。
+      customRecipes: customRecipes.map((recipe) => ({
+        ...recipe,
+        ...(recipe.cover ? { cover: persistableImage(recipe.cover) } : {}),
+        steps: persistableSteps(recipe.steps),
+      })),
       carryQty,
       carried,
     };
@@ -1384,6 +1540,48 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
    * 用户对「游客改动要不要并入账号」的选择。无论并还是先不并都记下已询问，
    * 之后不再重复弹；不并时游客那份原样留着，登出后仍然看得到，不会被覆盖。
    */
+  /**
+   * 「我的」页常驻的「合并本机数据」入口：重新把那份游客快照摆出来让用户再选一次。
+   * 与登录时的弹卡共用同一个 pendingGuestRef / GuestMergePrompt，不另写一套合并逻辑。
+   */
+  const reopenGuestMerge = useCallback(async () => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    try {
+      const guestRaw = await AsyncStorage.getItem(guestKey);
+      if (!guestRaw) return;
+      const guest = JSON.parse(guestRaw) as Partial<PersistedState>;
+      if (!hasContent(guest)) return;
+      pendingGuestRef.current = {
+        userId,
+        guest,
+        account: {
+          plan: planRef.current,
+          favorites: favoritesRef.current,
+          ratings: ratingsRef.current,
+          servings: servingsRef.current,
+          checked: checkedRef.current,
+          qtyOverrides: qtyOverridesRef.current,
+          removed: removedRef.current,
+          manualItems: manualItemsRef.current,
+          cookedLog: cookedLogRef.current,
+          customRecipes: customRecipesRef.current,
+        },
+        guestRaw,
+      };
+      setGuestMerge({
+        planCount: Object.values(guest.plan ?? {}).reduce(
+          (total, day) => total + Object.keys(day ?? {}).length,
+          0
+        ),
+        favoriteCount: guest.favorites?.length ?? 0,
+        manualCount: guest.manualItems?.length ?? 0,
+      });
+    } catch {
+      // 游客快照读不出来就当没有，不阻塞页面。
+    }
+  }, []);
+
   const resolveGuestMerge = useCallback((merge: boolean) => {
     const pending = pendingGuestRef.current;
     pendingGuestRef.current = null;
@@ -1550,6 +1748,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     syncing,
     guestMerge,
     resolveGuestMerge,
+    reopenGuestMerge,
     guestLocalOnly,
     plan,
     favorites,
@@ -1568,6 +1767,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     recipeFor,
     createRecipe,
     updateRecipe,
+    deleteRecipe,
     shoppingItems,
     missingRecipeCount,
     trippedCount,

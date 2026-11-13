@@ -1,14 +1,38 @@
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import React, { useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  PressableProps,
+  StyleProp,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from "react-native";
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  SlideInDown,
+  SlideOutDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 
 import { AppText } from "./Common";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { backupFileName, readableStamp, saveJsonFile } from "../lib/exportFile";
 import { useStore } from "../state/store";
-import { colors, radius, spacing } from "../theme";
+import { colors, motion, radius, shadow, spacing } from "../theme";
+
+const IS_ANDROID = Platform.OS === "android";
+const EASE_OUT = Easing.bezier(0.22, 1, 0.36, 1);
 
 type Status = { tone: "ok" | "warn"; text: string } | null;
 
@@ -127,64 +151,82 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-    <View style={styles.backdrop}>
+    <Animated.View
+      entering={FadeIn.duration(motion.duration.base)}
+      exiting={FadeOut.duration(motion.duration.fast)}
+      style={styles.backdrop}
+    >
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="关闭备份" />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
-        <View style={styles.handle} />
-        <AppText size={16} weight="800">导出 / 导入备份</AppText>
-        <AppText size={11} color={colors.muted} style={{ marginTop: 4, lineHeight: 17 }}>
-          备份是一个 JSON 文件，包含菜单、收藏、评分、份量、做菜记录和采购清单。换机时先导出，在新设备上导入即可。
+      <Animated.View
+        entering={SlideInDown.duration(motion.duration.slow).easing(EASE_OUT)}
+        exiting={SlideOutDown.duration(motion.duration.base)}
+        style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}
+        accessibilityViewIsModal
+      >
+        <View style={styles.grab} />
+        <View style={styles.head}>
+          <View style={styles.badge}>
+            <BoxIcon size={24} color={colors.ink} />
+          </View>
+          <AppText size={21} weight="800" style={styles.title}>备份你的菜谱和计划</AppText>
+        </View>
+        <AppText size={14} color={colors.muted} style={styles.lead}>
+          导出一个 JSON 文件，换手机或者重装时导回来。菜单、收藏、自建菜谱、评分、份量、做菜记录和采购清单都在里面。
         </AppText>
 
-        <Pressable
-          style={styles.primaryRow}
+        <PressScale
+          style={[styles.btn, styles.btnDark, busy && styles.btnBusy]}
           onPress={doExport}
           disabled={busy}
           accessibilityRole="button"
           accessibilityLabel="导出备份文件"
+          accessibilityState={{ disabled: busy, busy }}
         >
-          <View style={{ flex: 1 }}>
-            <AppText size={14} weight="600" color={colors.cream}>
-              {busy ? "处理中…" : "导出备份"}
-            </AppText>
-            <AppText size={11} color="#DCE4D4" style={{ marginTop: 2 }}>
-              生成一个带日期的 JSON 文件
-            </AppText>
-          </View>
-          <AppText size={15} color={colors.cream}>↓</AppText>
-        </Pressable>
+          {busy ? <ActivityIndicator size="small" color={colors.white} /> : <DownloadIcon size={20} color={colors.white} />}
+          <AppText size={16} weight="700" color={colors.white}>{busy ? "处理中…" : "导出备份文件"}</AppText>
+        </PressScale>
 
-        <Pressable
-          style={styles.secondaryRow}
+        <PressScale
+          style={[styles.btn, styles.btnSoft, { marginTop: 10 }, busy && styles.btnBusy]}
           onPress={doImport}
           disabled={busy}
           accessibilityRole="button"
           accessibilityLabel="从文件导入"
+          accessibilityState={{ disabled: busy, busy }}
         >
-          <View style={{ flex: 1 }}>
-            <AppText size={14} weight="600" color={colors.green}>
-              {busy ? "导入中…" : "从文件导入"}
-            </AppText>
-            <AppText size={11} color={colors.muted} style={{ marginTop: 2 }}>
-              会先展示备份摘要，确认后才覆盖
-            </AppText>
-          </View>
-          <AppText size={15} color={colors.green}>↑</AppText>
-        </Pressable>
+          <UploadIcon size={20} color={colors.ink} />
+          <AppText size={16} weight="700">{busy ? "导入中…" : "从文件导入"}</AppText>
+        </PressScale>
+        <AppText size={12.5} color={colors.muted} style={styles.caption}>
+          导入前会先展示备份摘要，确认后才覆盖
+        </AppText>
 
         {status ? (
-          <View style={[styles.status, status.tone === "warn" && styles.statusWarn]}>
-            <AppText size={11} color={status.tone === "warn" ? colors.orangeText : colors.green} style={{ lineHeight: 17 }}>
+          <Animated.View
+            key={status.text}
+            entering={FadeInDown.duration(motion.duration.base).easing(EASE_OUT)}
+            style={[styles.status, status.tone === "warn" ? styles.statusWarn : styles.statusOk]}
+            accessibilityLiveRegion="polite"
+          >
+            <View style={[styles.statusDot, { backgroundColor: status.tone === "warn" ? colors.accent : colors.leaf }]}>
+              {status.tone === "warn" ? <BangMark /> : <CheckMark />}
+            </View>
+            <AppText
+              size={13}
+              weight="600"
+              color={status.tone === "warn" ? colors.accentText : colors.leafText}
+              style={{ flex: 1, lineHeight: 19 }}
+            >
               {status.text}
             </AppText>
-          </View>
+          </Animated.View>
         ) : null}
 
         <Pressable onPress={onClose} style={styles.closeRow} accessibilityRole="button" accessibilityLabel="关闭">
-          <AppText size={13} color={colors.muted}>关闭</AppText>
+          <AppText size={14} weight="600" color={colors.muted}>关闭</AppText>
         </Pressable>
-      </View>
-    </View>
+      </Animated.View>
+    </Animated.View>
     {pendingImport ? (
       <ConfirmDialog
         title={pendingImport.source === "guest" ? "导入这份游客备份？" : "覆盖当前数据？"}
@@ -203,50 +245,149 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
+const APressable = Animated.createAnimatedComponent(Pressable);
+
+/** 按下回弹（设计稿 .btn:active scale(.96) + ease-spring）。 */
+function PressScale({
+  style,
+  children,
+  onPressIn,
+  onPressOut,
+  ...rest
+}: Omit<PressableProps, "style" | "children"> & { style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  const scale = useSharedValue(1);
+  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <APressable
+      {...rest}
+      onPressIn={(event) => {
+        scale.set(withSpring(0.96, motion.spring));
+        onPressIn?.(event);
+      }}
+      onPressOut={(event) => {
+        scale.set(withSpring(1, motion.spring));
+        onPressOut?.(event);
+      }}
+      style={[style, animated]}
+    >
+      {children}
+    </APressable>
+  );
+}
+
+type IconProps = { size?: number; color?: string };
+
+function BoxIcon({ size = 20, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5zM4 8.5 12 13l8-4.5M12 13v7"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function DownloadIcon({ size = 20, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function UploadIcon({ size = 20, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 19.5h14" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function CheckMark() {
+  return (
+    <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
+      <Path d="m5 12.5 4.5 4.5L19 7.5" stroke={colors.white} strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function BangMark() {
+  return (
+    <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 5v9M12 19v.5" stroke={colors.white} strokeWidth={3.4} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 const styles = StyleSheet.create({
   backdrop: {
     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: "rgba(28,34,24,0.32)",
+    backgroundColor: "rgba(23,31,46,0.4)",
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: colors.cream,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    ...shadow.floating,
   },
-  handle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: "#E0E2D5", alignSelf: "center", marginBottom: spacing.lg,
+  grab: {
+    width: IS_ANDROID ? 32 : 36,
+    height: IS_ANDROID ? 4 : 5,
+    borderRadius: 3,
+    backgroundColor: IS_ANDROID ? colors.placeholder : colors.border,
+    alignSelf: "center",
+    marginTop: IS_ANDROID ? 6 : 0,
+    marginBottom: 14,
   },
-  primaryRow: {
-    marginTop: spacing.lg,
-    minHeight: 60,
-    borderRadius: radius.md,
-    backgroundColor: colors.green,
-    paddingHorizontal: spacing.lg,
-    flexDirection: "row",
+  head: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  badge: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: colors.skySoft,
     alignItems: "center",
-    gap: spacing.md,
+    justifyContent: "center",
+    transform: [{ rotate: "-6deg" }],
   },
-  secondaryRow: {
-    marginTop: spacing.sm,
-    minHeight: 60,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.green,
-    paddingHorizontal: spacing.lg,
+  title: { flex: 1, letterSpacing: -0.3, lineHeight: 27 },
+  lead: { marginTop: spacing.md, marginBottom: 18, lineHeight: 21 },
+  btn: {
     flexDirection: "row",
+    minHeight: 52,
+    paddingHorizontal: 22,
+    borderRadius: IS_ANDROID ? radius.pill : 16,
     alignItems: "center",
-    gap: spacing.md,
+    justifyContent: "center",
+    gap: spacing.sm,
   },
+  btnDark: { backgroundColor: colors.ink },
+  btnSoft: { backgroundColor: colors.surfaceAlt },
+  btnBusy: { opacity: 0.6 },
+  caption: { textAlign: "center", marginTop: 10 },
   status: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
     marginTop: spacing.md,
     padding: spacing.md,
     borderRadius: radius.sm,
-    backgroundColor: colors.greenSoft,
   },
-  statusWarn: { backgroundColor: colors.orangeSoft },
-  closeRow: { marginTop: spacing.md, paddingVertical: spacing.md, alignItems: "center" },
+  statusOk: { backgroundColor: colors.leafSoft },
+  statusWarn: { backgroundColor: colors.accentSoft },
+  statusDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -1,
+  },
+  closeRow: { marginTop: spacing.sm, minHeight: 44, alignItems: "center", justifyContent: "center" },
 });

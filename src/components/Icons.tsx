@@ -1,9 +1,11 @@
 import React from "react";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
+import { colors } from "../theme";
+
 type IconProps = { color?: string; size?: number; filled?: boolean };
 
-export function HomeIcon({ color = "#818774", size = 22 }: IconProps) {
+export function HomeIcon({ color = colors.muted, size = 22 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M3 10.5 12 3.5l9 7" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
@@ -12,7 +14,7 @@ export function HomeIcon({ color = "#818774", size = 22 }: IconProps) {
   );
 }
 
-export function CalendarIcon({ color = "#818774", size = 22, filled = false }: IconProps) {
+export function CalendarIcon({ color = colors.muted, size = 22, filled = false }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Rect
@@ -32,7 +34,7 @@ export function CalendarIcon({ color = "#818774", size = 22, filled = false }: I
   );
 }
 
-export function HeartIcon({ color = "#818774", size = 22, filled = false }: IconProps) {
+export function HeartIcon({ color = colors.muted, size = 22, filled = false }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -46,7 +48,7 @@ export function HeartIcon({ color = "#818774", size = 22, filled = false }: Icon
   );
 }
 
-export function StarIcon({ color = "#D76543", size = 18, filled = false }: IconProps) {
+export function StarIcon({ color = colors.accent, size = 18, filled = false }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -60,7 +62,7 @@ export function StarIcon({ color = "#D76543", size = 18, filled = false }: IconP
   );
 }
 
-export function UserIcon({ color = "#818774", size = 22 }: IconProps) {
+export function UserIcon({ color = colors.muted, size = 22 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={12} cy={8.2} r={3.9} stroke={color} strokeWidth={1.7} />
@@ -69,7 +71,7 @@ export function UserIcon({ color = "#818774", size = 22 }: IconProps) {
   );
 }
 
-export function SearchIcon({ color = "#9AA08D", size = 18 }: IconProps) {
+export function SearchIcon({ color = colors.placeholder, size = 18 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={10.8} cy={10.8} r={6.4} stroke={color} strokeWidth={1.8} />
@@ -78,7 +80,7 @@ export function SearchIcon({ color = "#9AA08D", size = 18 }: IconProps) {
   );
 }
 
-export function BackIcon({ color = "#385440", size = 20 }: IconProps) {
+export function BackIcon({ color = colors.primary, size = 20 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M14.5 5 7.5 12l7 7" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -86,7 +88,7 @@ export function BackIcon({ color = "#385440", size = 20 }: IconProps) {
   );
 }
 
-export function PlusIcon({ color = "#385440", size = 16 }: IconProps) {
+export function PlusIcon({ color = colors.primary, size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M12 4v16M4 12h16" stroke={color} strokeWidth={2} strokeLinecap="round" />
@@ -94,7 +96,7 @@ export function PlusIcon({ color = "#385440", size = 16 }: IconProps) {
   );
 }
 
-export function CloseIcon({ color = "#385440", size = 18 }: IconProps) {
+export function CloseIcon({ color = colors.primary, size = 18 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="m6 6 12 12M18 6 6 18" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
@@ -102,7 +104,7 @@ export function CloseIcon({ color = "#385440", size = 18 }: IconProps) {
   );
 }
 
-export function ClockIcon({ color = "#818774", size = 14 }: IconProps) {
+export function ClockIcon({ color = colors.muted, size = 14 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={12} cy={12} r={8.4} stroke={color} strokeWidth={1.8} />
@@ -111,7 +113,7 @@ export function ClockIcon({ color = "#818774", size = 14 }: IconProps) {
   );
 }
 
-export function CheckIcon({ color = "#FFFEFA", size = 14 }: IconProps) {
+export function CheckIcon({ color = colors.surface, size = 14 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="m5 12.8 4.5 4.4L19 6.6" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
@@ -119,7 +121,7 @@ export function CheckIcon({ color = "#FFFEFA", size = 14 }: IconProps) {
   );
 }
 
-export function PlayIcon({ color = "#FFFEFA", size = 16 }: IconProps) {
+export function PlayIcon({ color = colors.surface, size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M8 5.2 19 12 8 18.8V5.2Z" fill={color} />
@@ -127,7 +129,7 @@ export function PlayIcon({ color = "#FFFEFA", size = 16 }: IconProps) {
   );
 }
 
-export function TrashIcon({ color = "#818774", size = 16 }: IconProps) {
+export function TrashIcon({ color = colors.muted, size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M4.5 7h15M9.5 7V4.8h5V7M6.8 7l1 12.4h8.4L17.2 7" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
@@ -135,7 +137,7 @@ export function TrashIcon({ color = "#818774", size = 16 }: IconProps) {
   );
 }
 
-export function SwapIcon({ color = "#385440", size = 16 }: IconProps) {
+export function SwapIcon({ color = colors.primary, size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M4 8.5h13l-3-3M20 15.5H7l3 3" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -143,7 +145,7 @@ export function SwapIcon({ color = "#385440", size = 16 }: IconProps) {
   );
 }
 
-export function ChevronUpIcon({ color = "#818774", size = 14 }: IconProps) {
+export function ChevronUpIcon({ color = colors.muted, size = 14 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M6 15 12 9l6 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -151,10 +153,95 @@ export function ChevronUpIcon({ color = "#818774", size = 14 }: IconProps) {
   );
 }
 
-export function ChevronDownIcon({ color = "#818774", size = 14 }: IconProps) {
+export function ChevronDownIcon({ color = colors.muted, size = 14 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M6 9l6 6 6-6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** 发现 tab：指南针，选中时指针填番茄红（设计稿 .fillable）。 */
+export function CompassIcon({ color = colors.muted, size = 22, filled = false }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={filled ? 2.2 : 1.8} />
+      <Path
+        d="m15.5 8.5-2 5-5 2 2-5z"
+        fill={filled ? colors.accent : "none"}
+        stroke={filled ? colors.accent : color}
+        strokeWidth={filled ? 2.2 : 1.8}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+export function DiceIcon({ color = colors.ink, size = 15 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={4} y={4} width={16} height={16} rx={4.5} stroke={color} strokeWidth={2} />
+      <Circle cx={9} cy={9} r={1.3} fill={color} />
+      <Circle cx={15} cy={15} r={1.3} fill={color} />
+      <Circle cx={15} cy={9} r={1.3} fill={color} />
+      <Circle cx={9} cy={15} r={1.3} fill={color} />
+    </Svg>
+  );
+}
+
+export function FlameIcon({ color = colors.muted, size = 14 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 21c3.9 0 6.5-2.6 6.5-6.2 0-3.8-3-5.6-3.9-9.3-1.9 1.4-2.6 3.3-2.6 4.8-1.3-.9-2-2.2-2.1-3.6C7.5 8.7 5.5 11.4 5.5 14.8 5.5 18.4 8.1 21 12 21z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+export function ChevronRightIcon({ color = colors.muted, size = 14 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="m9 5 7 7-7 7" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** AI 排餐：四角星。 */
+export function SparkleIcon({ color = colors.ink, size = 17 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 3.5c.6 4.2 2.3 5.9 6.5 6.5-4.2.6-5.9 2.3-6.5 6.5-.6-4.2-2.3-5.9-6.5-6.5 4.2-.6 5.9-2.3 6.5-6.5z"
+        fill={color}
+      />
+      <Path d="M18.5 15.5c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5z" fill={color} />
+    </Svg>
+  );
+}
+
+export function BasketIcon({ color = colors.ink, size = 24 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M3.5 10h17l-1.6 8.4a2 2 0 0 1-2 1.6H7.1a2 2 0 0 1-2-1.6z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <Path d="m8 10 3-5.5M16 10l-3-5.5M9.5 14v2.5M14.5 14v2.5" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** 拖动把手：两列三行圆点。 */
+export function GripIcon({ color = colors.placeholder, size = 20 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      {[6, 12, 18].map((y) => (
+        <React.Fragment key={y}>
+          <Circle cx={9} cy={y} r={1.6} />
+          <Circle cx={15} cy={y} r={1.6} />
+        </React.Fragment>
+      ))}
     </Svg>
   );
 }

@@ -13,12 +13,32 @@ export type StepImage = {
   /** 压缩后（上传前）的真实像素，瀑布流按它算比例。 */
   width?: number;
   height?: number;
+  /**
+   * 只在本机内存里有的临时地址（刚选完图、还没落到缓存目录）。
+   * **永远不进 jsonb、不进备份**：换台设备就是死链。存盘前由 store 搬到
+   * `document/recipe-media/...` 并把这一项抹掉。
+   */
+  localUri?: string;
 };
 
 export type RecipeStep = {
   text: string;
   images?: StepImage[];
 };
+
+/** 单个图片对象（封面用）；字段全空就返回 undefined。 */
+export function normalizeStepImage(value: unknown): StepImage | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const item = value as Record<string, unknown>;
+  const id = typeof item.id === "string" && item.id ? item.id : "";
+  if (!id) return undefined;
+  return {
+    id,
+    path: typeof item.path === "string" && item.path ? item.path : undefined,
+    width: typeof item.width === "number" && Number.isFinite(item.width) ? item.width : undefined,
+    height: typeof item.height === "number" && Number.isFinite(item.height) ? item.height : undefined,
+  };
+}
 
 export function normalizeStepImages(value: unknown): StepImage[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -54,6 +74,23 @@ export function normalizeSteps(value: unknown): RecipeStep[] {
     steps.push(images ? { text, images } : { text });
   }
   return steps;
+}
+
+/**
+ * 写进云端 jsonb / 导出文件前必须过这一层：`localUri` 只在本机有效，
+ * 换台设备就是死链，绝不能进持久化数据。
+ */
+export function persistableImage(image: StepImage): StepImage {
+  const { localUri: _local, ...rest } = image;
+  return rest;
+}
+
+export function persistableSteps(steps: RecipeStep[]): RecipeStep[] {
+  return steps.map((step) =>
+    step.images?.length
+      ? { ...step, images: step.images.map(persistableImage) }
+      : step
+  );
 }
 
 /** 只要文本时用这个，别在 JSX 里写 `step.text` 的字面散落一堆。 */

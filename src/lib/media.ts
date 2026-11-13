@@ -275,3 +275,58 @@ export async function removeRecipeMedia(ref: Pick<MediaRef, "userId" | "recipeId
     // 同上。
   }
 }
+
+// ---------------------------------------------------------------- 头像
+/**
+ * 头像和菜谱图共用同一个桶和同一套缓存，只是路径第二段固定是 `avatar`：
+ * `{userId}/avatar/{imageId}.jpg`。所以复用 MediaRef，recipeId 传 "avatar" 即可，
+ * 但**删除必须按精确 path**，绝不能走 removeRecipeMedia 的前缀列举。
+ */
+export const AVATAR_DIR = "avatar";
+
+export function avatarRef(userId: string, imageId: string): MediaRef {
+  return { userId, recipeId: AVATAR_DIR, imageId };
+}
+
+/** 从 `{userId}/avatar/{imageId}.jpg` 反解出 imageId；格式不对就当没有头像。 */
+export function avatarImageId(userId: string, path: string | null | undefined): string | null {
+  if (!path) return null;
+  const prefix = `${userId}/${AVATAR_DIR}/`;
+  if (!path.startsWith(prefix) || !path.endsWith(".jpg")) return null;
+  const id = path.slice(prefix.length, -4);
+  return id.includes("/") ? null : id || null;
+}
+
+/** 头像的展示地址：先本地缓存，再签名 URL，最后下载落盘。失败返回 null（上层显示首字母）。 */
+export async function resolveAvatarUri(userId: string, path: string): Promise<string | null> {
+  const imageId = avatarImageId(userId, path);
+  if (!imageId) return null;
+  const ref = avatarRef(userId, imageId);
+  const local = cachedMediaFile(ref);
+  if (local) return local.uri;
+  try {
+    const urls = await signedMediaUrls([ref]);
+    const url = urls[path];
+    if (!url) return null;
+    return (await downloadMedia(ref, url)) ?? url;
+  } catch {
+    return null;
+  }
+}
+
+/** 删一个精确对象（换头像后清旧文件）：Storage 一条 + 本地缓存一条，不做前缀扫描。 */
+export async function removeAvatarFile(userId: string, path: string): Promise<void> {
+  const imageId = avatarImageId(userId, path);
+  try {
+    await getSupabase().storage.from(MEDIA_BUCKET).remove([path]);
+  } catch {
+    // 离线时留着，下次换头像会再清一次。
+  }
+  if (!imageId) return;
+  const file = cacheFile(avatarRef(userId, imageId));
+  try {
+    if (file?.exists) file.delete();
+  } catch {
+    // 缓存文件删不掉不影响功能，体积由 LRU 兜底。
+  }
+}

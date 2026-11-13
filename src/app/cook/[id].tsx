@@ -2,13 +2,31 @@ import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Linking, Platform, Pressable as RNPressable } from "react-native";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { AppState, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeInLeft,
+  FadeInRight,
+  FadeOutDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  ZoomIn,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "../../components/Common";
-import { FoodArt } from "../../components/FoodArt";
-import { CloseIcon, HeartIcon, StarIcon } from "../../components/Icons";
+import {
+  BackIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  FlameIcon,
+  HeartIcon,
+  PlayIcon,
+  StarIcon,
+} from "../../components/Icons";
+import { SteamPot } from "../../components/SteamPot";
 import {
   cancelNotice,
   notificationsSupported,
@@ -20,15 +38,15 @@ import {
 } from "../../lib/cookNotify";
 import { CookSession, clearCookSession, loadCookSession, saveCookSession } from "../../lib/cookSession";
 import { useStore } from "../../state/store";
-import { colors, radius, spacing } from "../../theme";
+import { colors, motion, radius, shadow, spacing } from "../../theme";
 
-const DEEP = "#2E4636";
-const FLOAT = "#3C5743";
+const DEEP = colors.deep;
+const FLOAT = colors.deepRaised;
 const DIM = colors.onDeepBody;
 const SUB = colors.onDeepSub;
 const HINT = colors.onDeepHint;
 const LABEL = colors.onDeepLabel;
-const TIP = colors.onDeepTipBody;
+const GLASS = "rgba(255,255,255,0.08)";
 
 const formatTime = (seconds: number) => {
   const safe = Math.max(0, seconds);
@@ -44,7 +62,8 @@ export default function CookScreen() {
     resume?: string;
   }>();
   const insets = useSafeAreaInsets();
-  const { favorites, toggleFavorite, setMeal, selectedDate, ratings, rateRecipe, logCooked, findRecipe } = useStore();
+  const { favorites, toggleFavorite, setMeal, selectedDate, ratings, rateRecipe, logCooked, cookedThisWeek, findRecipe } =
+    useStore();
   const recipe = findRecipe(id);
   useKeepAwake();
 
@@ -58,8 +77,13 @@ export default function CookScreen() {
   const [showExit, setShowExit] = useState(false);
   const [perm, setPerm] = useState<NotifyPermission | null>(null);
   const [showEnableRow, setShowEnableRow] = useState(false);
+  /** 每到点一次 +1，蒸汽锅据此跳锅盖。 */
+  const [dingKey, setDingKey] = useState(0);
+  /** 切步方向：1 往后、-1 往前，决定步骤文字从哪边滑入。 */
+  const [dir, setDir] = useState(1);
   const elapsedBase = useRef(0);
-  const runStart = useRef<number | null>(Date.now());
+  // 挂载时由切步 effect 写入起点，不在渲染里读时钟。
+  const runStart = useRef<number | null>(null);
   const remainingHold = useRef(0);
   const deadline = useRef<number | null>(null);
   const noticeId = useRef<string | null>(null);
@@ -99,10 +123,7 @@ export default function CookScreen() {
   }, [step, stepSeconds]);
 
   useEffect(() => {
-    if (!recipe) {
-      setResumeReady(true);
-      return;
-    }
+    if (!recipe) return;
     let cancelled = false;
     loadCookSession(recipe.id).then((saved) => {
       if (cancelled) return;
@@ -184,10 +205,6 @@ export default function CookScreen() {
   }, []);
 
   useEffect(() => {
-    if (perm === "granted") setShowEnableRow(false);
-  }, [perm]);
-
-  useEffect(() => {
     const clear = () => {
       const id = noticeId.current;
       noticeId.current = null;
@@ -233,6 +250,7 @@ export default function CookScreen() {
         deadline.current = finishedAt;
         setElapsedTotal(Math.floor(elapsedBase.current / 1000));
         setPaused(true);
+        setDingKey((n) => n + 1);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
     };
@@ -275,12 +293,15 @@ export default function CookScreen() {
       setFinished(true);
       return;
     }
+    setDir(1);
     setStep((value) => value + 1);
     setPaused(false);
   }, [step, total, logCooked, recipe?.id, commitRun, perm]);
 
   const goPrev = useCallback(() => {
     if (step === 0) return;
+    Haptics.selectionAsync().catch(() => {});
+    setDir(-1);
     setStep((value) => value - 1);
     setPaused(false);
   }, [step]);
@@ -288,7 +309,8 @@ export default function CookScreen() {
   const favorited = recipe ? favorites.includes(recipe.id) : false;
   const myRating = recipe ? ratings[recipe.id] ?? 0 : 0;
   const done = left === 0;
-  const progress = useMemo(() => (total === 0 ? 0 : (step + 1) / total), [step, total]);
+  const remainingRatio = stepSeconds > 0 ? left / stepSeconds : 0;
+  const isLast = step + 1 >= total;
 
   const resumeContinue = () => {
     if (!resume) return;
@@ -311,15 +333,13 @@ export default function CookScreen() {
   if (!recipe) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + 40, paddingHorizontal: 24 }]}>
-        <AppText size={16} weight="700" color={colors.cream}>菜谱不存在</AppText>
+        <AppText size={16} weight="700" color={colors.canvas}>菜谱不存在</AppText>
         <Pressable onPress={() => router.back()} style={{ marginTop: 16 }}>
-          <AppText size={14} color={colors.cream}>返回</AppText>
+          <AppText size={14} color={colors.canvas}>返回</AppText>
         </Pressable>
       </View>
     );
   }
-
-  const tone = (hex: string, alpha: string) => hex + alpha;
 
   // 三支分开写：不可用 ≠ 用户关过通知，别把责任推给用户。
   const notifyUnavailable = (!notificationsSupported || perm === "unavailable") && !finished;
@@ -329,7 +349,7 @@ export default function CookScreen() {
   const notifySlot =
     notifyUnavailable || notifyDenied || notifyAsking ? (
       <View style={styles.notifyRow}>
-        <AppText size={10} color={SUB} style={{ flex: 1 }}>
+        <AppText size={12} color={SUB} style={{ flex: 1 }}>
           {notifyUnavailable
             ? "到点只在 App 里提示，离开后会错过"
             : notifyDenied
@@ -338,7 +358,7 @@ export default function CookScreen() {
         </AppText>
         {notifyUnavailable ? null : notifyDenied ? (
           <Pressable onPress={openNotificationSettings} hitSlop={8} accessibilityLabel="去系统设置打开通知">
-            <AppText size={11} weight="600" color={colors.orangeOnDeep}>去设置</AppText>
+            <AppText size={13} weight="700" color={colors.sun}>去设置</AppText>
           </Pressable>
         ) : (
           <Pressable
@@ -350,176 +370,259 @@ export default function CookScreen() {
             hitSlop={8}
             accessibilityLabel="开启到点提醒"
           >
-            <AppText size={11} weight="600" color={colors.orangeOnDeep}>开启</AppText>
+            <AppText size={13} weight="700" color={colors.sun}>开启</AppText>
           </Pressable>
         )}
       </View>
     ) : null;
+
+  const hint = paused
+    ? done
+      ? isLast
+        ? "最后一步到点啦，点「完成这道菜」"
+        : "这一步到点啦，点 › 进入下一步"
+      : "计时已暂停 · 锅在打盹"
+    : "锅在忙，到点会叫你";
+  const minutesUsed = Math.max(1, Math.round(elapsedTotal / 60));
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + spacing.sm }]}>
       <View style={styles.topBar}>
         <Pressable
           onPress={() => (!finished && (!paused || elapsedTotal > 0) ? setShowExit(true) : router.back())}
-          hitSlop={10}
-          style={styles.closeBtn}
+          hitSlop={6}
+          style={styles.glassBtn}
           accessibilityLabel="退出烹饪"
         >
-          <CloseIcon size={16} color={DIM} />
+          <CloseIcon size={18} color={colors.onDeepTitle} />
         </Pressable>
-        <AppText size={12} weight="600" color={tone("#FFFFFF", "D9")}>
-          第 {step + 1} 步 / 共 {total} 步
-        </AppText>
-        <View style={[styles.timerPill, done && { borderColor: colors.orange }]}>
-          <AppText size={11} weight="600" color={done ? colors.orangeOnDeep : DIM} style={{ fontVariant: ["tabular-nums"] }}>
-            {formatTime(left)}
+        <View style={styles.titleBox}>
+          <AppText size={16} weight="800" color={colors.onDeepTitle} numberOfLines={1}>
+            {recipe.name}
+          </AppText>
+          <AppText size={12} weight="600" color={SUB} style={{ marginTop: 2 }}>
+            {finished ? `${total} 步全部完成` : `第 ${step + 1} / ${total} 步`}
           </AppText>
         </View>
+        {recipe.heat ? (
+          <View style={styles.heatChip}>
+            <FlameIcon size={14} color={colors.sun} />
+            <AppText size={12} weight="700" color={colors.sun}>
+              {recipe.heat}
+            </AppText>
+          </View>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
-      <View style={styles.progressRow}>
-        {steps.map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.progressSegment,
-              { backgroundColor: index < step ? colors.orange : index === step ? "#E08C6E" : "rgba(255,255,255,0.16)" },
-            ]}
-          />
-        ))}
-      </View>
+      {!finished ? (
+        <Animated.View exiting={FadeOutDown.duration(250)} style={styles.bars} accessibilityElementsHidden>
+          {steps.map((_, index) => {
+            const fill = index < step ? 1 : index === step ? 1 - remainingRatio : 0;
+            return (
+              <View key={index} style={styles.bar}>
+                <View style={[styles.barFill, { width: `${Math.round(Math.min(1, Math.max(0, fill)) * 100)}%` }]} />
+              </View>
+            );
+          })}
+        </Animated.View>
+      ) : null}
 
       {notifySlot}
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: spacing.lg }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 130 }}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!finished}
       >
-        {recipe.heat ? (
-          <View style={styles.heatChip}>
-            <AppText size={10} weight="600" color={DIM}>{recipe.heat}</AppText>
-          </View>
+        <PotStage finished={finished}>
+          <SteamPot
+            mode={finished ? "finished" : paused ? "paused" : "running"}
+            progress={remainingRatio}
+            dingKey={dingKey}
+          />
+        </PotStage>
+
+        {!finished ? (
+          <Animated.View exiting={FadeOutDown.duration(250)}>
+            <View style={styles.clock}>
+              <AppText
+                size={56}
+                weight="800"
+                color={done ? colors.sun : colors.onDeepTitle}
+                style={styles.clockText}
+                maxFontSizeMultiplier={1}
+              >
+                {formatTime(left)}
+              </AppText>
+              <AppText size={13} color={SUB} style={{ marginTop: 6 }}>
+                {hint}
+              </AppText>
+            </View>
+
+            <Animated.View
+              key={step}
+              entering={(dir > 0 ? FadeInRight : FadeInLeft).duration(420)}
+              style={styles.stepBlock}
+            >
+              <AppText size={13} weight="700" color={colors.sun}>
+                第 {step + 1} 步 · 约 {Math.max(1, Math.round(stepSeconds / 60))} 分钟
+              </AppText>
+              <AppText size={21} weight="700" color={colors.onDeepTitle} style={{ marginTop: 6, lineHeight: 32 }}>
+                {steps[step]}
+              </AppText>
+            </Animated.View>
+
+            {recipe.tips?.[step] ? (
+              <Animated.View key={`tip-${step}`} entering={FadeIn.duration(420).delay(120)} style={styles.tipCard}>
+                <AppText size={13} weight="800" color={colors.onDeepTitle}>
+                  小提示
+                </AppText>
+                <AppText size={13} color={SUB} style={{ flex: 1, lineHeight: 20 }}>
+                  {recipe.tips[step]}
+                </AppText>
+              </Animated.View>
+            ) : null}
+
+            <View style={styles.footer}>
+              <AppText size={12} color={LABEL}>
+                已完成 {step} 步，还剩 {Math.max(0, total - step - 1)} 步
+              </AppText>
+              <Pressable onPress={() => setShowAll(true)} hitSlop={10} accessibilityLabel="查看全部步骤">
+                <AppText size={12} weight="700" color={colors.sun}>
+                  查看全部步骤 →
+                </AppText>
+              </Pressable>
+            </View>
+          </Animated.View>
         ) : null}
-
-        <View style={styles.artHolder}>
-          <FoodArt kind={recipe.art} size={190} label={recipe.name} />
-        </View>
-
-        {done ? (
-          <View style={styles.doneTag}>
-            <AppText size={10} weight="700" color={colors.orangeOnDeep}>计时完成</AppText>
-          </View>
-        ) : null}
-
-        <AppText size={21} weight="800" color={colors.cream} style={{ marginTop: done ? spacing.sm : spacing.xl, lineHeight: 30 }}>
-          {steps[step]}
-        </AppText>
-        <AppText size={11} color={SUB} style={{ marginTop: 6 }}>
-          {recipe.name} · 这一步大约 {Math.max(1, Math.round(stepSeconds / 60))} 分钟
-        </AppText>
-
-        {recipe.tips?.[step] ? (
-          <View style={styles.tipCard}>
-            <AppText size={9} weight="600" color={LABEL} style={{ letterSpacing: 0.5 }}>
-              小提示
-            </AppText>
-            <AppText size={11} color={TIP} style={{ marginTop: 4, lineHeight: 18 }}>
-              {recipe.tips[step]}
-            </AppText>
-          </View>
-        ) : null}
-
-        <View style={styles.dotsRow}>
-          {steps.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.dot,
-                { backgroundColor: index === step ? colors.orange : index < step ? "#7E9076" : "rgba(255,255,255,0.18)" },
-              ]}
-            />
-          ))}
-        </View>
       </ScrollView>
 
-      <View style={styles.controls}>
-        <Pressable
-          onPress={goPrev}
-          disabled={step === 0}
-          style={[styles.circle, step === 0 && { opacity: 0.3 }]}
-          accessibilityLabel="上一步"
+      {!finished ? (
+        <Animated.View
+          exiting={FadeOutDown.duration(250)}
+          style={[styles.controls, { bottom: insets.bottom + spacing.xl }]}
         >
-          <AppText size={18} weight="600" color={DIM}>‹</AppText>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            togglePaused();
-          }}
-          style={styles.playButton}
-          accessibilityLabel={paused ? "继续计时" : "暂停计时"}
-        >
-          {paused ? (
-            <View style={styles.playTriangle} />
+          <Squish onPress={goPrev} disabled={step === 0} style={[styles.sideBtn, step === 0 && { opacity: 0.3 }]} label="上一步">
+            <BackIcon size={24} color={colors.onDeepTitle} />
+          </Squish>
+          <MainButton
+            paused={paused}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              togglePaused();
+            }}
+          />
+          {isLast ? (
+            <Squish onPress={goNext} style={styles.finishBtn} label="完成这道菜">
+              <AppText size={16} weight="800" color={colors.white}>
+                完成这道菜
+              </AppText>
+            </Squish>
           ) : (
-            <View style={{ flexDirection: "row", gap: 6 }}>
-              <View style={styles.pauseBar} />
-              <View style={styles.pauseBar} />
-            </View>
+            <Squish
+              onPress={goNext}
+              style={[styles.sideBtn, done && paused && styles.sideBtnCall]}
+              label="下一步"
+            >
+              <ChevronRightIcon size={24} color={done && paused ? colors.ink : colors.onDeepTitle} />
+            </Squish>
           )}
-        </Pressable>
-        <Pressable onPress={goNext} style={styles.circle} accessibilityLabel={step + 1 >= total ? "完成" : "下一步"}>
-          <AppText size={18} weight="600" color={DIM}>›</AppText>
-        </Pressable>
-      </View>
+        </Animated.View>
+      ) : (
+        <View style={[styles.doneLayer, { paddingBottom: insets.bottom + spacing.lg }]} pointerEvents="box-none">
+          <Animated.View entering={ZoomIn.springify().damping(11).delay(550)}>
+            <AppText size={48} weight="800" color={colors.onDeepTitle} style={{ letterSpacing: -1 }} maxFontSizeMultiplier={1}>
+              开饭啦！
+            </AppText>
+          </Animated.View>
+          <Animated.View entering={FadeInDown.delay(850).duration(600)} style={styles.doneCard}>
+            <View style={styles.statRow}>
+              <Stat value={`${minutesUsed}′`} label="这次用时" />
+              <Stat value={`${cookedThisWeek}`} label="本周第几道" />
+              <Stat value={`${total}`} label="步全部完成" />
+            </View>
 
-      <AppText size={10} color={HINT} style={{ textAlign: "center", marginBottom: spacing.md }}>
-        {paused ? "计时已暂停 · 点中间按钮继续" : "暂停计时 · 左右按钮切换步骤"}
-      </AppText>
+            <View style={styles.ratingRow}>
+              <AppText size={13} color={colors.muted}>
+                给这道菜打分
+              </AppText>
+              <View style={{ flexDirection: "row", gap: 4 }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Pressable
+                    key={star}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      rateRecipe(recipe.id, star);
+                    }}
+                    hitSlop={4}
+                    style={styles.starHit}
+                    accessibilityLabel={`评 ${star} 星`}
+                  >
+                    <StarIcon size={24} filled={star <= myRating} color={star <= myRating ? colors.sun : colors.disabled} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
-      <View
-        style={styles.finishSlot}
-        pointerEvents={step + 1 >= total ? "auto" : "none"}
-        accessibilityElementsHidden={step + 1 < total}
-        importantForAccessibility={step + 1 >= total ? "auto" : "no-hide-descendants"}
-      >
-        <Pressable
-          style={[styles.finishButton, step + 1 < total && styles.finishButtonHidden]}
-          onPress={goNext}
-          accessibilityLabel="完成这道菜"
-        >
-          <AppText size={14} weight="700" color={colors.cream}>完成这道菜</AppText>
-        </Pressable>
-      </View>
+            <Pressable onPress={() => toggleFavorite(recipe.id)} style={styles.favRow} accessibilityLabel={favorited ? "取消收藏" : "收藏这道菜"}>
+              <HeartIcon size={18} filled={favorited} color={favorited ? colors.accent : colors.ink} />
+              <AppText size={14} weight="700" color={colors.ink}>
+                {favorited ? "已收藏" : "收藏这道菜"}
+              </AppText>
+            </Pressable>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <AppText size={11} color={LABEL}>
-          已完成 {step} 步，还剩 {Math.max(0, total - step - 1)} 步
-        </AppText>
-        <Pressable onPress={() => setShowAll(true)} hitSlop={8} accessibilityLabel="查看全部步骤">
-          <AppText size={11} weight="600" color={colors.orangeOnDeep}>查看全部步骤 →</AppText>
-        </Pressable>
-      </View>
+            <Pressable
+              style={styles.darkBtn}
+              onPress={() => {
+                setMeal(selectedDate, "午餐", recipe.id);
+                setFinished(false);
+                router.back();
+              }}
+            >
+              <AppText size={15} weight="700" color={colors.white}>
+                记入今日午餐
+              </AppText>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setFinished(false);
+                router.back();
+              }}
+              style={styles.textBtn}
+            >
+              <AppText size={14} color={colors.muted}>
+                稍后再说
+              </AppText>
+            </Pressable>
+          </Animated.View>
+        </View>
+      )}
 
       <Modal visible={Boolean(resume)} transparent animationType="slide" onRequestClose={resumeFinish}>
         <View style={styles.sheetBackdrop}>
-          <View />
           <View style={[styles.resumeCard, { marginBottom: insets.bottom + spacing.md }]}>
-            <AppText size={10} weight="600" color={LABEL} style={{ letterSpacing: 0.5 }}>
+            <AppText size={12} weight="700" color={colors.sun}>
               继续上次烹饪
             </AppText>
-            <AppText size={15} weight="800" color={colors.cream} style={{ marginTop: 6 }}>
+            <AppText size={18} weight="800" color={colors.onDeepTitle} style={{ marginTop: 6 }}>
               {resume?.recipeName} · 第 {(resume?.step ?? 0) + 1} 步
             </AppText>
-            <AppText size={11} color={SUB} style={{ marginTop: 4 }}>
+            <AppText size={13} color={SUB} style={{ marginTop: 4 }}>
               还剩 {formatTime(resume?.remaining ?? 0)} · 已用时 {formatTime(resume?.elapsedTotal ?? 0)}
             </AppText>
-            <Pressable style={styles.resumePrimary} onPress={resumeContinue}>
-              <AppText size={13} weight="700" color={colors.cream}>继续烹饪</AppText>
+            <Pressable style={styles.sunBtn} onPress={resumeContinue}>
+              <PlayIcon size={18} color={colors.ink} />
+              <AppText size={15} weight="800" color={colors.ink}>
+                继续烹饪
+              </AppText>
             </Pressable>
-            <Pressable style={styles.resumeGhost} onPress={resumeFinish} accessibilityLabel="结束并记录这次烹饪">
-              <AppText size={12} weight="600" color={colors.cream}>结束并记录</AppText>
+            <Pressable style={styles.textBtn} onPress={resumeFinish} accessibilityLabel="结束并记录这次烹饪">
+              <AppText size={14} weight="600" color={colors.onDeepTitle}>
+                结束并记录
+              </AppText>
             </Pressable>
           </View>
         </View>
@@ -530,28 +633,39 @@ export default function CookScreen() {
           <Pressable style={{ flex: 1 }} onPress={() => setShowAll(false)} />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.sheetHandle} />
-            <AppText size={16} weight="800" color={colors.cream} style={{ marginBottom: spacing.md }}>
+            <AppText size={18} weight="800" color={colors.onDeepTitle} style={{ marginBottom: spacing.md }}>
               全部 {total} 步
             </AppText>
-            <ScrollView style={{ maxHeight: 360 }}>
-              {steps.map((text, index) => (
-                <Pressable
-                  key={index}
-                  onPress={() => {
-                    setStep(index);
-                    setPaused(false);
-                    setShowAll(false);
-                  }}
-                  style={[styles.sheetRow, index === step && { backgroundColor: "rgba(215,101,67,0.14)" }]}
-                >
-                  <AppText size={11} weight="700" color={index === step ? colors.orangeOnDeep : HINT} style={{ width: 22 }}>
-                    {index + 1}
-                  </AppText>
-                  <AppText size={12} color={index === step ? colors.cream : "#B9C7B2"} style={{ flex: 1, lineHeight: 19 }}>
-                    {text}
-                  </AppText>
-                </Pressable>
-              ))}
+            <ScrollView style={{ maxHeight: 380 }}>
+              {steps.map((text, index) => {
+                const current = index === step;
+                const past = index < step;
+                return (
+                  <Pressable
+                    key={index}
+                    onPress={() => {
+                      setDir(index >= step ? 1 : -1);
+                      setStep(index);
+                      setPaused(false);
+                      setShowAll(false);
+                    }}
+                    style={[styles.sheetRow, current && styles.sheetRowOn]}
+                  >
+                    <View style={[styles.stepNum, past && { backgroundColor: colors.leaf }, current && { backgroundColor: colors.sun }]}>
+                      <AppText size={12} weight="800" color={past || current ? colors.ink : HINT}>
+                        {index + 1}
+                      </AppText>
+                    </View>
+                    <AppText
+                      size={14}
+                      color={current ? colors.onDeepTitle : past ? HINT : DIM}
+                      style={{ flex: 1, lineHeight: 21 }}
+                    >
+                      {text}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -560,92 +674,39 @@ export default function CookScreen() {
       <Modal visible={showExit} transparent animationType="fade" onRequestClose={() => setShowExit(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.exitCard}>
-            <AppText size={16} weight="800">先不做了吗？</AppText>
-            <AppText size={12} color={colors.muted} style={{ marginTop: 6, lineHeight: 19 }}>
-              当前在第 {step + 1} 步，已用时 {formatTime(elapsedTotal)}。
+            <AppText size={19} weight="800">
+              先不做了吗？
             </AppText>
-            <Pressable style={styles.exitPrimary} onPress={() => setShowExit(false)}>
-              <AppText size={13} weight="700" color={colors.cream}>继续烹饪</AppText>
+            <AppText size={14} color={colors.muted} style={{ marginTop: 6, lineHeight: 21 }}>
+              第 {step + 1} 步 · 已用时 {formatTime(elapsedTotal)}，进度会自动保存。
+            </AppText>
+            <Pressable style={styles.darkBtn} onPress={() => setShowExit(false)}>
+              <AppText size={15} weight="700" color={colors.white}>
+                继续烹饪
+              </AppText>
             </Pressable>
             <Pressable
-              style={styles.exitGhost}
+              style={styles.softBtn}
               onPress={() => {
                 setShowExit(false);
                 router.back();
               }}
             >
-              <AppText size={13} weight="600" color={colors.green}>结束并保存进度</AppText>
+              <AppText size={15} weight="700" color={colors.ink}>
+                结束并保存进度
+              </AppText>
             </Pressable>
             <Pressable
-              style={{ marginTop: spacing.md, paddingVertical: spacing.sm }}
+              style={styles.textBtn}
               onPress={() => {
                 setShowExit(false);
                 clearCookSession();
                 router.back();
               }}
             >
-              <AppText size={12} color={colors.muted}>放弃本次烹饪</AppText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={finished} transparent animationType="fade" onRequestClose={() => setFinished(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.doneBadge}>
-              <AppText size={24} color={colors.green}>✓</AppText>
-            </View>
-            <AppText size={20} weight="800" style={{ marginTop: spacing.md }}>
-              开饭啦
-            </AppText>
-            <AppText size={12} color={colors.muted} style={{ marginTop: 6, textAlign: "center", lineHeight: 20 }}>
-              {recipe.name} 完成，总用时 {formatTime(elapsedTotal)}。
-              {"\n"}要把它记进今天的菜单吗？
-            </AppText>
-
-            <View style={styles.ratingRow}>
-              <AppText size={12} color={colors.muted}>给这道菜打分</AppText>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Pressable
-                  key={star}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    rateRecipe(recipe.id, star);
-                  }}
-                  hitSlop={4}
-                  accessibilityLabel={`评 ${star} 星`}
-                >
-                  <StarIcon size={22} filled={star <= myRating} color={star <= myRating ? colors.orange : "#D8D3C0"} />
-                </Pressable>
-              ))}
-            </View>
-
-            <Pressable onPress={() => toggleFavorite(recipe.id)} style={styles.metaRow}>
-              <HeartIcon size={16} filled={favorited} color={favorited ? colors.orange : colors.green} />
-              <AppText size={13} color={colors.green} weight="600">
-                {favorited ? "已收藏" : "收藏这道菜"}
+              <AppText size={14} color={colors.danger}>
+                放弃本次烹饪
               </AppText>
-            </Pressable>
-
-            <Pressable
-              style={styles.primary}
-              onPress={() => {
-                setMeal(selectedDate, "午餐", recipe.id);
-                setFinished(false);
-                router.back();
-              }}
-            >
-              <AppText size={14} weight="700" color={colors.cream}>记入今日午餐</AppText>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setFinished(false);
-                router.back();
-              }}
-              style={styles.textOnly}
-            >
-              <AppText size={13} color={colors.muted}>稍后再说</AppText>
             </Pressable>
           </View>
         </View>
@@ -654,232 +715,295 @@ export default function CookScreen() {
   );
 }
 
+/** 完成时锅往下沉、放大一点，靠近「开饭啦！」。 */
+function PotStage({ finished, children }: { finished: boolean; children: React.ReactNode }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.set(withSpring(finished ? 1 : 0, motion.springSoft));
+  }, [finished, t]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: t.value * 40 }, { scale: 1 + t.value * 0.06 }],
+  }));
+  return <Animated.View style={[styles.stage, style]}>{children}</Animated.View>;
+}
+
+/** 按下缩小、松手弹回的按钮。 */
+function Squish({
+  onPress,
+  disabled,
+  style,
+  label,
+  children,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  style?: React.ComponentProps<typeof View>["style"];
+  label: string;
+  children: React.ReactNode;
+}) {
+  const scale = useSharedValue(1);
+  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      onPressIn={() => scale.set(withSpring(0.88, motion.spring))}
+      onPressOut={() => scale.set(withSpring(1, motion.spring))}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+    >
+      <Animated.View style={[style, animated]}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
+/** 中间的大按钮：计时中是圆角方块 + 暂停，暂停时变成圆 + 播放。 */
+function MainButton({ paused, onPress }: { paused: boolean; onPress: () => void }) {
+  const round = useSharedValue(paused ? 1 : 0);
+  useEffect(() => {
+    round.set(withSpring(paused ? 1 : 0, motion.springSoft));
+  }, [paused, round]);
+  const shape = useAnimatedStyle(() => ({ borderRadius: 30 + round.value * 12 }));
+  return (
+    <Squish onPress={onPress} label={paused ? "继续计时" : "暂停计时"}>
+      <Animated.View style={[styles.mainBtn, shape]}>
+        {paused ? (
+          <View style={{ marginLeft: 4 }}>
+            <PlayIcon size={34} color={colors.ink} />
+          </View>
+        ) : (
+          <View style={{ flexDirection: "row", gap: 7 }}>
+            <View style={styles.pauseBar} />
+            <View style={styles.pauseBar} />
+          </View>
+        )}
+      </Animated.View>
+    </Squish>
+  );
+}
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={{ flex: 1, alignItems: "center" }}>
+      <AppText size={24} weight="800" color={colors.ink} style={{ fontVariant: ["tabular-nums"] }}>
+        {value}
+      </AppText>
+      <AppText size={12} color={colors.muted} style={{ marginTop: 2 }}>
+        {label}
+      </AppText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: DEEP, paddingHorizontal: spacing.xl },
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+  screen: { flex: 1, backgroundColor: DEEP },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    minHeight: 48,
+  },
+  glassBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: GLASS,
     alignItems: "center",
     justifyContent: "center",
   },
-  timerPill: {
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 60,
-  },
-  progressRow: { flexDirection: "row", gap: 6, marginTop: spacing.lg },
-  progressSegment: { flex: 1, height: 3, borderRadius: 2 },
+  titleBox: { flex: 1, alignItems: "center" },
   heatChip: {
-    alignSelf: "flex-start",
-    marginTop: spacing.lg,
-    backgroundColor: FLOAT,
+    height: 32,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-  },
-  artHolder: {
-    alignSelf: "center",
-    width: 232,
-    height: 232,
-    borderRadius: 116,
-    backgroundColor: "#F0EBDD",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: spacing.lg,
-  },
-  doneTag: {
-    alignSelf: "flex-start",
-    marginTop: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.orange,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    marginBottom: spacing.sm,
-  },
-  tipCard: {
-    marginTop: spacing.lg,
-    backgroundColor: FLOAT,
-    borderRadius: 15,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  dotsRow: { flexDirection: "row", gap: 6, justifyContent: "center", marginTop: spacing.lg },
-  dot: { width: 5, height: 5, borderRadius: 3 },
-  controls: {
+    borderRadius: 11,
+    backgroundColor: GLASS,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xxl,
-    marginTop: spacing.md,
+    gap: 4,
   },
-  circle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playButton: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    backgroundColor: colors.orange,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pauseBar: { width: 5, height: 22, borderRadius: 2, backgroundColor: colors.cream },
-  playTriangle: {
-    width: 0,
-    height: 0,
-    marginLeft: 5,
-    borderTopWidth: 11,
-    borderBottomWidth: 11,
-    borderLeftWidth: 18,
-    borderTopColor: "transparent",
-    borderBottomColor: "transparent",
-    borderLeftColor: colors.cream,
-  },
-  footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.12)",
-    paddingTop: spacing.md,
-  },
-  finishSlot: {
-    height: 48 + spacing.md,
-    justifyContent: "flex-end",
-  },
-  finishButtonHidden: {
-    opacity: 0,
-  },
-  finishButton: {
-    marginHorizontal: spacing.xl,
-    marginBottom: spacing.md,
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: colors.orangeText,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
-  sheet: {
-    backgroundColor: DEEP,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-  },
-  sheetHandle: {
-    alignSelf: "center",
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.24)",
-    marginBottom: spacing.lg,
-  },
-  sheetRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.sm,
-    marginBottom: 2,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(20,26,18,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.xl,
-  },
-  modalCard: {
-    backgroundColor: colors.cream,
-    borderRadius: radius.lg,
-    padding: spacing.xl,
-    width: "100%",
-    alignItems: "center",
-  },
-  exitCard: {
-    backgroundColor: colors.cream,
-    borderRadius: radius.lg,
-    padding: spacing.xl,
-    width: "100%",
-  },
-  exitPrimary: {
-    marginTop: spacing.lg,
-    height: 46,
-    borderRadius: radius.md,
-    backgroundColor: colors.green,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  exitGhost: {
-    marginTop: spacing.sm,
-    height: 44,
-    borderRadius: radius.md,
-    backgroundColor: colors.greenSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  doneBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.greenSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  resumeCard: {
-    marginHorizontal: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: radius.lg,
-    backgroundColor: DEEP,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-  resumePrimary: {
-    marginTop: spacing.md,
-    height: 44,
-    borderRadius: radius.md,
-    backgroundColor: colors.orangeText,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  resumeGhost: { marginTop: 2, paddingVertical: 10, alignItems: "center" },
+  bars: { flexDirection: "row", gap: 6, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  bar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: colors.deepLine, overflow: "hidden" },
+  barFill: { height: 5, borderRadius: 3, backgroundColor: colors.sun },
   notifyRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginHorizontal: spacing.xl,
     marginTop: spacing.sm,
-    paddingHorizontal: 12,
-    height: 30,
-    borderRadius: 15,
+    paddingHorizontal: 14,
+    minHeight: 36,
+    borderRadius: 12,
+    backgroundColor: GLASS,
   },
-  ratingRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.lg },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: spacing.md, paddingVertical: spacing.sm },
-  primary: {
-    marginTop: spacing.md,
-    width: "100%",
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: colors.orangeText,
+  stage: { alignSelf: "center", marginTop: spacing.sm },
+  clock: { alignItems: "center", marginTop: -6 },
+  clockText: { fontVariant: ["tabular-nums"], letterSpacing: -1, lineHeight: 62 },
+  stepBlock: { marginTop: spacing.lg, marginHorizontal: spacing.xl, minHeight: 110 },
+  tipCard: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: spacing.sm,
+    marginHorizontal: spacing.xl,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.07)",
+  },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.xl,
+    minHeight: 44,
+  },
+  controls: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xxl,
+  },
+  sideBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: GLASS,
     alignItems: "center",
     justifyContent: "center",
   },
-  textOnly: { marginTop: spacing.sm, paddingVertical: spacing.sm },
+  sideBtnCall: { backgroundColor: colors.sun },
+  mainBtn: {
+    width: 84,
+    height: 84,
+    backgroundColor: colors.sun,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.sun,
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  pauseBar: { width: 8, height: 28, borderRadius: 3, backgroundColor: colors.ink },
+  finishBtn: {
+    height: 64,
+    paddingHorizontal: 22,
+    borderRadius: 22,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doneLayer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  doneCard: {
+    alignSelf: "stretch",
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: 26,
+    padding: 18,
+    ...shadow.floating,
+  },
+  statRow: { flexDirection: "row", marginBottom: spacing.lg },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 14,
+    paddingLeft: 14,
+    paddingRight: 6,
+    minHeight: 48,
+  },
+  starHit: { width: 34, height: 44, alignItems: "center", justifyContent: "center" },
+  favRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 48, marginTop: 4 },
+  darkBtn: {
+    marginTop: spacing.md,
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  softBtn: {
+    marginTop: spacing.sm,
+    height: 50,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sunBtn: {
+    marginTop: spacing.lg,
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.sun,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textBtn: { marginTop: 4, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: FLOAT,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.24)",
+    marginBottom: spacing.lg,
+  },
+  sheetRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 14,
+    marginBottom: 2,
+  },
+  sheetRowOn: { backgroundColor: "rgba(255,200,58,0.14)" },
+  stepNum: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: GLASS,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(8,24,17,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  exitCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    width: "100%",
+  },
+  resumeCard: {
+    marginHorizontal: spacing.lg,
+    padding: spacing.xl,
+    borderRadius: radius.xl,
+    backgroundColor: FLOAT,
+  },
 });

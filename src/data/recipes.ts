@@ -1,4 +1,4 @@
-import { normalizeSteps, type RecipeStep } from "../lib/steps";
+import { normalizeSteps, type RecipeStep, type StepImage } from "../lib/steps";
 
 export type ArtKind = "pasta" | "salad" | "rice" | "soup" | "toast";
 
@@ -21,6 +21,8 @@ export type Recipe = {
   tags: string[];
   /** 内置菜有插画；自建菜没有封面，画首字兜底，所以是可选的。 */
   art?: ArtKind;
+  /** 自建菜的成品图（用户在新建页选的那张）；有图时详情页/发现页都用它替换插画。 */
+  cover?: StepImage;
   ingredients: Ingredient[];
   steps: RecipeStep[];
   heat?: string;
@@ -206,15 +208,19 @@ export const recipeMinutes = (recipe: Recipe) => (recipe.minutes > 0 ? `${recipe
 export const recipeSubtitle = (recipe: Recipe) =>
   recipe.subtitle || (recipe.custom ? "自己录入的菜谱" : "");
 
-export const categories = ["推荐", "快手菜", "家常菜", "轻食"];
+// 这轮只上「全部 / 快手菜」：轻食只有几道内置菜能进（表单没有热量输入），
+// 家常菜没有可解释的判据，放出来就是点进去和「全部」一模一样的空壳。
+export const categories = ["全部", "快手菜"];
+
+export const isQuickRecipe = (recipe: Recipe) => {
+  const steps = recipe.steps.filter((step) => step.text.trim().length > 0).length;
+  // minutes 为 0 = 没填，不能当「0 分钟」算，否则所有老自建菜都会掉进快手菜。
+  if (recipe.minutes > 0) return recipe.minutes <= 20;
+  return steps > 0 && steps <= 5;
+};
 
 export const matchesCategory = (recipe: Recipe, category: string) => {
-  if (category === "推荐") return true;
-  // 自建菜可以不填用时，0 分钟不该被算成快手菜。
-  if (category === "快手菜") return recipe.minutes > 0 && recipe.minutes <= 15;
-  if (category === "轻食") return recipe.tags.some((tag) => tag.includes("轻食")) || recipe.art === "salad";
-  // 自建菜没有插画可判，默认归在家常菜里，否则只能在「推荐」下找到。
-  if (category === "家常菜") return recipe.custom || ["rice", "soup", "toast", "pasta"].includes(recipe.art ?? "");
+  if (category === "快手菜") return isQuickRecipe(recipe);
   return true;
 };
 

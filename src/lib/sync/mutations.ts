@@ -1,4 +1,5 @@
-import type { RecipeStep } from "../steps";
+import type { RecipeStep, StepImage } from "../steps";
+import { persistableImage, persistableSteps } from "../steps";
 import type { Ingredient } from "../../data/recipes";
 import { enqueue } from "./outbox";
 import type { SyncTable } from "./outbox";
@@ -66,6 +67,7 @@ export type RecipeRow = {
   calories: number | null;
   tags: string[];
   art: string | null;
+  cover: StepImage | null;
   ingredients: Ingredient[];
   steps: RecipeStep[];
   heat: string | null;
@@ -219,6 +221,8 @@ export function buildRecipeRow(params: {
   calories?: number | null;
   heat?: string | null;
   art?: string | null;
+  /** 成品图；jsonb 里只放 {id,path,width,height}，localUri 绝不能进云端。 */
+  cover?: StepImage | null;
   tips?: string[];
   stepMinutes?: number[];
 }): RecipeRow {
@@ -233,8 +237,10 @@ export function buildRecipeRow(params: {
     calories: params.calories ?? null,
     tags: params.tags ?? [],
     art: params.art || null,
+    // 云端只认 path：localUri 是本机临时地址，推上去另一台设备就是破图。
+    cover: params.cover ? persistableImage(params.cover) : null,
     ingredients: params.ingredients,
-    steps: params.steps,
+    steps: persistableSteps(params.steps),
     heat: params.heat || null,
     tips: params.tips ?? [],
     step_minutes: params.stepMinutes ?? [],

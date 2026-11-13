@@ -48,3 +48,10 @@ yarn-error.*
 *.keystore
 credentials.json
 keystore-backup*
+
+# Supabase CLI 本地链接信息（项目 ref 等），别提交
+supabase/.temp/
+
+# 所有 env 文件都不提交（EXPO_PUBLIC_* 在本地 .env.local 里配）
+.env
+.env.*

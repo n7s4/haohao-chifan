@@ -14,9 +14,10 @@
     "android": {
       "package": "com.wenxin.haohaochifan",
       "adaptiveIcon": {
-        "backgroundColor": "#FFFEFA",
+        "backgroundColor": "#F05133",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundImage": "./assets/android-icon-background.png"
       },
       "predictiveBackGestureEnabled": true,
       "permissions": [
@@ -30,7 +31,24 @@
       "expo-router",
       "expo-sharing",
       "expo-notifications",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允许「好好吃饭」访问相册，给菜谱添加成品图和步骤图。",
+          "cameraPermission": "允许「好好吃饭」使用相机，拍下做好的菜和每一步。",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#F05133"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

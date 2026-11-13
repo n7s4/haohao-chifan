@@ -53,7 +53,7 @@ export default function RootLayout() {
           <Stack
             screenOptions={{
               headerShown: false,
-              contentStyle: { backgroundColor: colors.cream },
+              contentStyle: { backgroundColor: colors.canvas },
               animation: "slide_from_right",
             }}
           >
@@ -66,6 +66,7 @@ export default function RootLayout() {
             <Stack.Screen name="shopping-list" options={{ presentation: "modal" }} />
             <Stack.Screen name="sign-in" options={{ presentation: "modal" }} />
             <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
+            <Stack.Screen name="account" />
           </Stack>
         </StoreProvider>
       </SafeAreaProvider>
@@ -74,5 +75,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.cream },
+  root: { flex: 1, backgroundColor: colors.canvas },
 });

@@ -1,5 +1,5 @@
 import type { ArtKind, Ingredient, Recipe } from "../../data/recipes";
-import { normalizeSteps } from "../steps";
+import { normalizeStepImage, normalizeSteps } from "../steps";
 import { getSupabase } from "../supabase";
 
 /** 从云端拉取一份快照，交给 store 按 updated_at 合并成本地 blob 的形状。 */
@@ -47,6 +47,7 @@ export type RemoteRecipeRow = {
   calories: number | null;
   tags: string[] | null;
   art: string | null;
+  cover: unknown;
   ingredients: unknown;
   steps: unknown;
   heat: string | null;
@@ -98,6 +99,7 @@ export function recipeFromRemote(row: RemoteRecipeRow): Recipe {
     calories: row.calories ?? 0,
     tags: toStrings(row.tags),
     art,
+    cover: normalizeStepImage(row.cover),
     ingredients: toIngredients(row.ingredients),
     steps: normalizeSteps(row.steps),
     heat: row.heat ?? undefined,
@@ -151,7 +153,7 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot> {
     supabase
       .from("recipes")
       .select(
-        "id,name,subtitle,description,minutes,difficulty,calories,tags,art,ingredients,steps,heat,tips,step_minutes,deleted,updated_at"
+        "id,name,subtitle,description,minutes,difficulty,calories,tags,art,cover,ingredients,steps,heat,tips,step_minutes,deleted,updated_at"
       )
       .order("updated_at", { ascending: false })
       .limit(LIMIT),
