@@ -83,7 +83,7 @@ export async function changePassword(password: string): Promise<string | null> {
     const message = error.message.toLowerCase();
     if (message.includes("reauthentication") || message.includes("nonce") || message.includes("session"))
       return "为安全起见，请退出后重新登录再改密码";
-    if (message.includes("password should be at least")) return "密码至少 8 位";
+    if (message.includes("password should be at least")) return "密码至少 6 位";
     if (message.includes("same password")) return "新密码不能和原密码一样";
     return error.message;
   }

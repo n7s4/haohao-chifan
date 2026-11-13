@@ -168,7 +168,7 @@ export default function AccountScreen() {
             icon={<CameraIcon size={19} color={colors.sunText} />}
             tint={colors.sunSoft}
             label="更换头像"
-                        onPress={() => setPhotoSheet(true)}
+            onPress={() => setPhotoSheet(true)}
           />
           <Row
             icon={<LockIcon size={19} color={colors.ink} />}
@@ -181,7 +181,7 @@ export default function AccountScreen() {
             icon={<SwapIcon size={19} color={colors.leafText} />}
             tint={colors.leafSoft}
             label="更换账号"
-                        onPress={() => setSignOutOpen(true)}
+            onPress={() => setSignOutOpen(true)}
             last
           />
         </Animated.View>
