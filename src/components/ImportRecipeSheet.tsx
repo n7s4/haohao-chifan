@@ -105,12 +105,11 @@ function StageDot({ state }: { state: "todo" | "doing" | "ok" }) {
 
 export function ImportRecipePane({
   onDraft,
-  onManual,
   onBusyChange,
 }: {
   /** 草稿里的 coverUri / steps[].imageUris 指向这里的图片，调用方负责落成菜谱图片。 */
   onDraft: (draft: ImportedDraft) => void;
-  onManual: () => void;
+  onManual?: () => void;
   /** 解析中调用方要锁住「手动填写」切换，免得迟到的草稿覆盖刚填的内容。 */
   onBusyChange?: (busy: boolean) => void;
 }) {
@@ -243,7 +242,7 @@ export function ImportRecipePane({
     if (!canSubmit) {
       // 设计稿：按钮常亮，点了再告诉用户缺什么，比一个灰按钮更好懂。
       setShake((n) => n + 1);
-      setMessage(text.trim() ? "内容太短了，至少把菜名和做法贴进来。" : "先贴一段笔记文字，或者加一张截图");
+      setMessage(text.trim() ? "内容太短，至少要有菜名和做法" : "先贴文字或加截图");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
       return;
     }
@@ -284,7 +283,7 @@ export function ImportRecipePane({
       setPhase("error");
       onBusyChange?.(false);
       setNeedsLogin(problem instanceof ImportError && problem.code === "session_expired");
-      setMessage(problem instanceof Error && problem.message ? problem.message : "这次没解析成功，换一段内容或手动填写。");
+      setMessage(problem instanceof Error && problem.message ? problem.message : "解析失败，换段内容再试");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
     }
   };
@@ -334,12 +333,12 @@ export function ImportRecipePane({
         <View style={{ flex: 1 }}>
           <AppText size={16} weight="800">看到好菜，丢进来就行</AppText>
           <AppText size={13} color={colors.sunText} style={{ marginTop: 3, lineHeight: 19 }}>
-            贴一段笔记正文、加几张截图，帮你整理成能直接开做的菜谱
+            贴链接、文字或截图，整理成菜谱
           </AppText>
         </View>
       </Animated.View>
 
-      <Label hint="复制笔记的分享链接，读取正文、图片和视频配音">小红书链接</Label>
+      <Label>小红书链接</Label>
       <View style={styles.linkRow}>
         <Field
           value={link}
@@ -382,12 +381,12 @@ export function ImportRecipePane({
           {transcript === "running" ? <StageDot state="doing" /> : transcript === "done" ? <StageDot state="ok" /> : null}
           <AppText size={13} color={transcript === "failed" || transcript === "skipped" ? colors.muted : colors.ink} style={{ flex: 1, lineHeight: 19 }}>
             {transcript === "running"
-              ? "正在识别视频配音，一般 1~3 分钟，好了会自动加到下面的文字里"
+              ? "正在识别视频配音，约 1–3 分钟"
               : transcript === "done"
-                ? "视频配音已加到文字里，看一眼再解析"
+                ? "配音已加到文字里"
                 : transcript === "skipped"
-                  ? "这条是视频笔记，但这次没法识别配音，做法可以手动补进文字里"
-                  : "配音没识别出来，可以手动补做法"}
+                  ? "配音识别失败，可手动补做法"
+                  : "没识别出配音，可手动补做法"}
           </AppText>
         </Animated.View>
       ) : null}
@@ -405,12 +404,11 @@ export function ImportRecipePane({
         editable={!working}
         error={Boolean(message) && !canSubmit && phase !== "error"}
         shake={shake}
-        icon={<LinkIcon size={20} color={colors.placeholder} />}
         inputStyle={styles.textarea}
         accessibilityLabel="笔记文字"
       />
 
-      <Label hint={`最多 ${MAX_IMAGES} 张，按添加顺序当作步骤先后`} style={{ marginTop: spacing.xl }}>
+      <Label hint={`最多 ${MAX_IMAGES} 张`} style={{ marginTop: spacing.xl }}>
         截图
       </Label>
       <View style={styles.shots} onLayout={(event) => setGridW(event.nativeEvent.layout.width)}>
@@ -474,7 +472,7 @@ export function ImportRecipePane({
           </AppText>
           {phase === "error" && images.length > 0 && !needsLogin ? (
             <AppText size={12} color={colors.muted} style={{ marginTop: 4, lineHeight: 18 }}>
-              图片失败不影响文字：可以先只贴正文试试，图片之后再补。
+              可以先只用文字解析
             </AppText>
           ) : null}
         </Animated.View>
@@ -494,11 +492,11 @@ export function ImportRecipePane({
             );
           })}
           <AppText size={12} color={colors.muted} style={{ marginTop: 4, lineHeight: 18 }}>
-            大约 20 秒，解析完会自动填进「手动填写」，再核对一遍就能保存。
+            大约 20 秒
           </AppText>
           {transcript === "running" ? (
             <AppText size={12} color={colors.sunText} style={{ marginTop: 4, lineHeight: 18 }}>
-              视频配音还没识别完，这次解析不会包含配音里的内容。
+              配音还没识别完，本次不含配音
             </AppText>
           ) : null}
         </Animated.View>
@@ -519,14 +517,10 @@ export function ImportRecipePane({
         <Pressable onPress={cancel} style={styles.ghost} accessibilityRole="button" accessibilityLabel="取消解析">
           <AppText size={15} weight="600" color={colors.muted}>取消解析</AppText>
         </Pressable>
-      ) : (
-        <Pressable onPress={onManual} style={styles.ghost} accessibilityRole="button" accessibilityLabel="改为手动填写">
-          <AppText size={15} weight="600" color={colors.muted}>不导入，自己手动填写</AppText>
-        </Pressable>
-      )}
+      ) : null}
 
       <AppText size={11} color={colors.placeholder} style={{ marginTop: spacing.sm, lineHeight: 17, textAlign: "center" }}>
-        支持小红书链接；抖音链接暂不支持，可以截图导入。
+        抖音笔记请用截图导入
       </AppText>
     </View>
   );

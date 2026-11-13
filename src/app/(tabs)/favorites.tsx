@@ -36,10 +36,10 @@ type FilterKey = "all" | "mine" | "made" | "quick";
 
 /** 每个筛选空了时说什么、往哪儿引。 */
 const EMPTY: Record<FilterKey, { title: string; text: string; cta: string; href: "/" | "/plan" | "/create-recipe"; art: "soup" | "toast" }> = {
-  all: { title: "还没有收藏的菜谱", text: "在菜谱页点一下心形，就会出现在这里", cta: "去发现", href: "/", art: "soup" },
-  mine: { title: "还没有自建菜谱", text: "家里的拿手菜、刷到的好菜，都可以存下来", cta: "新建一道", href: "/create-recipe", art: "toast" },
+  all: { title: "还没有收藏的菜谱", text: "点亮心形，菜就会存到这里", cta: "去发现", href: "/", art: "soup" },
+  mine: { title: "还没有自建菜谱", text: "存下你的拿手菜", cta: "新建一道", href: "/create-recipe", art: "toast" },
   made: { title: "这周还没开火", text: "挑一道收藏的菜，今晚就试试", cta: "去计划", href: "/plan", art: "soup" },
-  quick: { title: "没有 20 分钟内的快手菜", text: "去发现页看看快手菜", cta: "去发现", href: "/", art: "soup" },
+  quick: { title: "还没有快手菜", text: "20 分钟内能做好的菜会出现在这", cta: "去发现", href: "/", art: "soup" },
 };
 
 const rise = (i: number) =>
@@ -107,7 +107,7 @@ export default function FavoritesScreen() {
           <AppText size={14} color={colors.muted} style={{ marginTop: 2 }}>
             {saved.length > 0
               ? `${saved.length} 道菜${madeCount > 0 ? ` · ${madeCount} 道本周做过` : ""}`
-              : "心形点亮的菜会住在这里"}
+              : "还没有收藏"}
           </AppText>
         </Animated.View>
 

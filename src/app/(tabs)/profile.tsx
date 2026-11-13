@@ -176,7 +176,7 @@ export default function ProfileScreen() {
   const statusLine = isGuestSyncLine(auth.userId, syncPaused, pendingCount, syncing, syncLabel);
 
   const isGuest = !auth.userId;
-  const displayName = isGuest ? "文鑫" : displayNameFor(auth.email);
+  const displayName = isGuest ? "游客" : displayNameFor(auth.email);
   const displayInitial = displayName.slice(0, 1).toUpperCase();
   const hasGuestLeftover = guestLocalOnly && !isGuest;
 
@@ -230,34 +230,34 @@ export default function ProfileScreen() {
   const notifyOn = notify === "granted";
   const notifySub =
     notify === "granted"
-      ? "离开 App 也能收到计时提醒"
+      ? "计时到点时通知你"
       : notify === "denied"
-        ? "通知已在系统里关闭，点开关去设置"
-        : "提醒已关闭，到点只在前台提示";
+        ? "通知已在系统中关闭"
+        : "已关闭";
   const onToggleNotify = () => {
     Haptics.selectionAsync().catch(() => {});
     if (notify === "undetermined") {
       requestNotifyPermission().then((ok) => {
         setNotify(ok ? "granted" : "denied");
-        show({ text: ok ? "已开启到点提醒" : "没有拿到通知权限，可以去系统设置里打开" });
+        show({ text: ok ? "已开启到点提醒" : "没有通知权限，请在系统设置中开启" });
       });
       return;
     }
     // 权限一旦给了，App 里收不回来；关闭和重新打开都得去系统设置。
-    show({ text: notifyOn ? "在系统设置里关闭通知即可停用提醒" : "去系统设置里打开通知" });
+    show({ text: notifyOn ? "请在系统设置中关闭通知" : "去系统设置里打开通知" });
     openNotificationSettings();
   };
 
   const backupSub = (() => {
-    if (!lastExportAt) return "还没备份过 · 换手机前记得导出";
+    if (!lastExportAt) return "还没备份过";
     const date = new Date(lastExportAt);
-    if (Number.isNaN(date.getTime())) return "收藏、自建菜谱、计划和清单都在里面";
+    if (Number.isNaN(date.getTime())) return "导出或导入全部数据";
     return `上次备份 ${date.getMonth() + 1} 月 ${date.getDate()} 日`;
   })();
 
   const signOut = () => {
     setSignOutOpen(false);
-    auth.signOut().then(() => show({ text: "已退出登录，本机数据都还在" }));
+    auth.signOut().then(() => show({ text: "已退出登录" }));
   };
 
   return (
@@ -303,7 +303,7 @@ export default function ProfileScreen() {
           <Animated.View entering={rise(1)} style={styles.pauseCard}>
             <AppText size={13} weight="700" color={colors.accentText}>同步已暂停</AppText>
             <AppText size={12} color={colors.muted} style={{ marginTop: 3, lineHeight: 18 }}>
-              {syncPaused} 本机改动都还在，重新登录后会自动继续。
+              {syncPaused}
             </AppText>
           </Animated.View>
         ) : null}
@@ -406,7 +406,7 @@ export default function ProfileScreen() {
                 icon={<SyncIcon size={19} color={colors.leafText} />}
                 tint={colors.leafSoft}
                 title="合并本机数据"
-                sub="登录前在这台手机上的改动还没并进账号"
+                sub="有未并入账号的本机改动"
                 onPress={reopenGuestMerge}
               />
             ) : null}
@@ -430,7 +430,7 @@ export default function ProfileScreen() {
               icon={<UserIcon size={19} color={colors.sunText} />}
               tint={colors.sunSoft}
               title={isGuest ? "登录 / 注册" : "账号与资料"}
-              sub={isGuest ? "登录后菜单、收藏在每台设备上同步" : auth.email ?? "已登录"}
+              sub={isGuest ? "多设备同步菜单和收藏" : auth.email ?? "已登录"}
               onPress={openAccount}
               last
             />
@@ -458,7 +458,7 @@ export default function ProfileScreen() {
       {signOutOpen ? (
         <ConfirmDialog
           title="确定要退出登录吗？"
-          message="退出后这台设备上的数据会保留；重新登录同一账号即可恢复同步。本地图片缓存按账号分开，换账号不会串图。"
+          message="本机数据会保留，重新登录即可继续同步。"
           confirmLabel="退出登录"
           destructive
           onCancel={() => setSignOutOpen(false)}

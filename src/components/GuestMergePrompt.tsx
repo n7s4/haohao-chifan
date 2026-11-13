@@ -115,7 +115,7 @@ export function GuestMergeSheet({
           <View style={{ flex: 1 }}>
             <AppText size={21} weight="800" style={{ lineHeight: 27 }}>本机有一份未登录时的改动</AppText>
             <AppText size={13} color={colors.muted} style={styles.hint}>
-              并入后会推送到当前账号，原游客副本保留在本机。
+              并入后会同步到当前账号
             </AppText>
           </View>
         </View>
@@ -158,7 +158,7 @@ export function GuestMergeSheet({
           <Animated.View entering={FadeIn.duration(motion.duration.base)}>
             <AppText size={12} color={colors.muted} style={styles.note}>{backedUp}</AppText>
             <AppText size={12} color={colors.muted} style={styles.note}>
-              文件在系统下载 / 文件 App 里，也可以稍后再并入。
+              文件在「下载」或「文件」App 里
             </AppText>
           </Animated.View>
         ) : null}

@@ -168,22 +168,20 @@ export default function AccountScreen() {
             icon={<CameraIcon size={19} color={colors.sunText} />}
             tint={colors.sunSoft}
             label="更换头像"
-            sub="拍一张，或从相册里挑"
-            onPress={() => setPhotoSheet(true)}
+                        onPress={() => setPhotoSheet(true)}
           />
           <Row
             icon={<LockIcon size={19} color={colors.ink} />}
             tint={colors.skySoft}
             label="修改密码"
-            sub="至少 8 位"
+            sub="至少 6 位"
             onPress={() => setPasswordOpen(true)}
           />
           <Row
             icon={<SwapIcon size={19} color={colors.leafText} />}
             tint={colors.leafSoft}
             label="更换账号"
-            sub="先退出，再用另一个邮箱登录"
-            onPress={() => setSignOutOpen(true)}
+                        onPress={() => setSignOutOpen(true)}
             last
           />
         </Animated.View>
@@ -209,9 +207,7 @@ export default function AccountScreen() {
             <Animated.View entering={sheetIn} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
               <View style={styles.grab} />
               <AppText size={21} weight="800" style={styles.sheetTitle}>更换头像</AppText>
-              <AppText size={14} color={colors.muted} style={{ marginTop: 6, marginBottom: spacing.lg }}>
-                方形照片效果最好，会自动裁成圆角。
-              </AppText>
+              <View style={{ height: spacing.lg }} />
               <SheetItem
                 icon={<CameraIcon size={20} color={colors.accentText} />}
                 tint={colors.accentSoft}
@@ -250,7 +246,7 @@ export default function AccountScreen() {
       {signOutOpen ? (
         <ConfirmDialog
           title="确定要退出登录吗？"
-          message="退出后这台设备上的数据会保留；重新登录同一账号即可恢复同步。本地图片缓存按账号分开，换账号不会串图。"
+          message="本机数据会保留，重新登录即可继续同步。"
           confirmLabel="退出登录"
           destructive
           onCancel={() => setSignOutOpen(false)}
@@ -364,7 +360,7 @@ function PasswordSheet({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const shake = useSharedValue(0);
   const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
 
-  const longEnough = password.length >= 8;
+  const longEnough = password.length >= 6;
   const matches = password.length > 0 && password === confirm;
   const ready = longEnough && matches && !busy;
   const mismatch = confirm.length > 0 && confirm.length >= password.length && !matches;
@@ -416,7 +412,7 @@ function PasswordSheet({ onClose, onDone }: { onClose: () => void; onDone: () =>
               onChange={setPassword}
               visible={visible}
               toggle={() => setVisible((current) => !current)}
-              placeholder="至少 8 位"
+              placeholder="至少 6 位"
               ok={longEnough}
             />
             <PasswordField
@@ -439,7 +435,7 @@ function PasswordSheet({ onClose, onDone }: { onClose: () => void; onDone: () =>
             </Animated.View>
           ) : null}
           <AppText size={13} color={colors.muted} style={styles.hint}>
-            改完其他设备需要重新登录；这台手机保持登录状态。
+            其他设备需要重新登录
           </AppText>
           <PressScale
             onPress={save}

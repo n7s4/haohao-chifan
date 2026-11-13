@@ -90,7 +90,7 @@ export default function SignInScreen() {
   const submit = async () => {
     if (busy) return;
     if (!emailOk) {
-      fail(email.trim() ? "邮箱格式看起来不对，检查一下" : "先填一个邮箱");
+      fail(email.trim() ? "邮箱格式不对" : "先填一个邮箱");
       return;
     }
     if (password.length < 6) {
@@ -109,7 +109,7 @@ export default function SignInScreen() {
         const result = await auth.signUp(email, password);
         if (result.error) fail(result.error);
         else if (result.needsConfirm) {
-          setNotice("注册成功，去邮箱点一下确认链接，回来再登录。");
+          setNotice("注册成功，去邮箱确认后再登录");
           setMode("in");
         } else {
           leave();
@@ -155,8 +155,8 @@ export default function SignInScreen() {
           )}
           <AppText size={15} color={colors.muted} style={styles.introText}>
             {auth.userId
-              ? "登录后菜单、收藏和采购清单会在你的账号里同步。"
-              : "登录后，菜单、收藏和采购清单在每台设备上同步，换手机也不用重新排。"}
+              ? "菜单、收藏和清单已同步到账号"
+              : "登录后，菜单和收藏多设备同步"}
           </AppText>
         </Animated.View>
 
@@ -170,7 +170,7 @@ export default function SignInScreen() {
                 <View style={{ flex: 1 }}>
                   <AppText size={16} weight="700" numberOfLines={1}>{auth.email ?? "已登录"}</AppText>
                   <AppText size={13} color={colors.muted} style={{ marginTop: 2, lineHeight: 18 }}>
-                    {syncPaused ? "同步暂停了，改动还留在本机，下面这条恢复后会自动补传" : "数据会在回到前台时自动同步"}
+                    {syncPaused ? "同步已暂停，恢复后自动补传" : "自动同步已开启"}
                   </AppText>
                 </View>
               </View>
@@ -188,7 +188,7 @@ export default function SignInScreen() {
                 style={{ marginTop: spacing.lg }}
               />
               <AppText size={12} color={colors.muted} style={styles.hint}>
-                退出后这台设备上的数据仍保留，重新登录会继续同步。
+                本机数据会保留
               </AppText>
             </Card>
           </Animated.View>
@@ -200,7 +200,7 @@ export default function SignInScreen() {
               </View>
               <AppText size={16} weight="700" style={{ marginTop: spacing.md }}>云端还没配置</AppText>
               <AppText size={13} color={colors.muted} style={{ marginTop: 4, lineHeight: 19 }}>
-                当前是纯本地模式，所有数据只存在这台设备上。配置好 Supabase 后这里会出现登录入口。
+                数据只保存在这台设备上
               </AppText>
             </Card>
           </Animated.View>
@@ -275,7 +275,7 @@ export default function SignInScreen() {
             />
 
             <AppText size={12} color={colors.muted} style={styles.hint}>
-              密码由 Supabase 保管，App 里不存明文。忘记密码暂不支持，需要重置请联系管理员。
+              忘记密码请联系管理员
             </AppText>
           </Animated.View>
         )}

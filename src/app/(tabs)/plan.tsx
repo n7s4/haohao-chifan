@@ -197,7 +197,7 @@ export default function PlanScreen() {
       setDraft(null);
       return;
     }
-    setConfirm({ title: "放弃这次修改？", message: "本次调整不会保存。", label: "放弃", run: () => setDraft(null) });
+    setConfirm({ title: "放弃这次修改？", message: "这次的调整不会保存。", label: "放弃", run: () => setDraft(null) });
   };
 
   const moveMeal = (fromDate: string, slot: MealSlot, delta: number) => {
@@ -268,7 +268,7 @@ export default function PlanScreen() {
       setPop({ date: dateKey, slots: placed });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       show({
-        text: `已补齐 ${placed.length} 餐，食材进了采购清单`,
+        text: `已排好 ${placed.length} 餐`,
         undo: () => placed.forEach((slot) => setMeal(dateKey, slot, null)),
       });
     }, AI_THINK_MS);
@@ -342,7 +342,7 @@ export default function PlanScreen() {
         >
           <AppText size={14} weight="700" color={colors.muted}>这道菜暂时取不到</AppText>
           <AppText size={12} color={colors.placeholder} style={{ marginTop: 3 }} numberOfLines={1}>
-            可能在另一台设备上新建，稍后同步再看
+            同步后再看看
           </AppText>
         </Pressable>
       );
@@ -389,11 +389,11 @@ export default function PlanScreen() {
             <>
               <AppText size={13} weight="700" color={colors.muted}>{slot}将移到{weekdayOf(dragTarget!.date!)}</AppText>
               <AppText size={11} color={colors.placeholder} style={{ marginTop: 3 }}>
-                {view[dragTarget!.date!]?.[slot] ? "那一格已有菜，松手后交换" : "松手后生效"}
+                {view[dragTarget!.date!]?.[slot] ? "松手交换" : "松手放下"}
               </AppText>
             </>
           ) : (
-            <AppText size={12} color={colors.placeholder}>拖到别的餐位或上面的日期</AppText>
+            <AppText size={12} color={colors.placeholder}>拖到其他餐位或日期</AppText>
           )}
         </View>
       );
@@ -560,7 +560,7 @@ export default function PlanScreen() {
         {editing ? (
           <Animated.View entering={FadeIn.duration(200)} style={styles.hintBar}>
             <AppText size={12} color={colors.ink} style={{ flex: 1 }}>
-              长按拖到别的餐位或日期 · 保存后生效
+              长按拖动，调换餐位
             </AppText>
             <Pressable onPress={cancelEdit} hitSlop={8} accessibilityRole="button" accessibilityLabel="取消编辑">
               <AppText size={12} weight="700" color={colors.muted}>取消</AppText>
@@ -576,13 +576,13 @@ export default function PlanScreen() {
             <View style={{ flex: 1 }}>
               <AppText size={15} weight="700">这一周还是空的</AppText>
               <AppText size={12} color={colors.muted} style={{ marginTop: 3, lineHeight: 18 }}>
-                先按收藏和菜谱库排满三天，之后随时能改。
+                先帮你排三天，随时能改
               </AppText>
               <Pressable
                 onPress={() => {
                   const placed = planThreeDays();
                   if (placed > 0) setPop({ date: selectedDate, slots: [...mealSlots] });
-                  showText(placed > 0 ? `已排好 ${placed} 餐，可以继续调整` : "这几天已经排满了");
+                  showText(placed > 0 ? `已排好 ${placed} 餐` : "这几天已经排满了");
                 }}
                 style={({ pressed }) => [styles.emptyWeekCta, pressed && { transform: [{ scale: 0.95 }] }]}
                 accessibilityLabel={fillLabel}
@@ -602,7 +602,7 @@ export default function PlanScreen() {
             </AppText>
             <AppText size={13} color={colors.muted} style={[styles.num, { marginTop: 2 }]}>{daySummary}</AppText>
           </View>
-          {editing ? null : (
+          {editing || weekEmpty ? null : (
             <Pressable
               onPress={fillDay}
               disabled={dayFull || busy}
@@ -641,7 +641,7 @@ export default function PlanScreen() {
                   ? pending
                     ? `还差 ${pending} 样 · 已买 ${bought} 样`
                     : `${bought} 样都买齐了`
-                  : "排好菜后，食材会自动汇总到这里"}
+                  : "排好菜，食材自动进清单"}
                 {missingRecipeCount > 0 ? ` · ${missingRecipeCount} 道未计入` : ""}
               </AppText>
               <ProgressBar value={progress} />
@@ -684,7 +684,7 @@ export default function PlanScreen() {
               {recipeFor(view[rowActions.dateKey] ?? {}, rowActions.slot)?.name ?? rowActions.slot}
             </AppText>
             <AppText size={12} color={colors.muted} style={{ marginTop: 3, marginBottom: spacing.md }}>
-              {weekdayOf(rowActions.dateKey)} · {rowActions.slot} · 保存后才生效
+              {weekdayOf(rowActions.dateKey)} · {rowActions.slot}
             </AppText>
             <SheetAction icon={<SwapIcon size={20} color={colors.ink} />} label="移到其他餐次" onPress={() => { setSlotMenu(rowActions); setRowActions(null); }} />
             <SheetAction icon={<PlusIcon size={20} color={colors.ink} />} label="换一道菜" onPress={() => { openPicker(rowActions.dateKey, rowActions.slot); setRowActions(null); }} />
@@ -708,8 +708,7 @@ export default function PlanScreen() {
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSlotMenu(null)} accessibilityLabel="关闭餐次菜单" />
           <Animated.View entering={FadeInDown.springify().damping(18)} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.sheetHandle} />
-            <AppText size={18} weight="800">移到</AppText>
-            <AppText size={12} color={colors.muted} style={{ marginTop: 3, marginBottom: spacing.md }}>同样只写入草稿，保存后才生效</AppText>
+            <AppText size={18} weight="800" style={{ marginBottom: spacing.md }}>移到</AppText>
             {mealSlots.map((target) => {
               const current = view[slotMenu.dateKey]?.[target];
               const isSource = target === slotMenu.slot;

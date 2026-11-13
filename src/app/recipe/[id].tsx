@@ -290,11 +290,6 @@ export default function RecipeDetailScreen() {
                 ))}
               </View>
             ) : null}
-            {ingredients.length ? (
-              <AppText size={12.5} color={colors.muted} style={{ marginTop: spacing.sm }}>
-                点一下勾掉已经备好的食材
-              </AppText>
-            ) : null}
 
             {seasonings.length ? (
               <>
@@ -401,7 +396,7 @@ export default function RecipeDetailScreen() {
         isFavorite={isFavorite}
         onToggleFavorite={() => {
           toggleFavorite(recipe.id);
-          show({ text: isFavorite ? "已取消收藏" : "已收藏" });
+          if (isFavorite) show({ text: "已取消收藏", undo: () => toggleFavorite(recipe.id) });
         }}
         onEdit={
           recipe.custom

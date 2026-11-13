@@ -171,7 +171,7 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
           <AppText size={21} weight="800" style={styles.title}>备份你的菜谱和计划</AppText>
         </View>
         <AppText size={14} color={colors.muted} style={styles.lead}>
-          导出一个 JSON 文件，换手机或者重装时导回来。菜单、收藏、自建菜谱、评分、份量、做菜记录和采购清单都在里面。
+          换手机或重装时，用它恢复全部数据。
         </AppText>
 
         <PressScale
@@ -197,9 +197,6 @@ export function BackupSheet({ onClose }: { onClose: () => void }) {
           <UploadIcon size={20} color={colors.ink} />
           <AppText size={16} weight="700">{busy ? "导入中…" : "从文件导入"}</AppText>
         </PressScale>
-        <AppText size={12.5} color={colors.muted} style={styles.caption}>
-          导入前会先展示备份摘要，确认后才覆盖
-        </AppText>
 
         {status ? (
           <Animated.View

@@ -139,7 +139,7 @@ export default function DiscoverScreen() {
     const on = !favorites.includes(id);
     toggleFavorite(id);
     Haptics.selectionAsync().catch(() => {});
-    show(on ? { text: "已收藏，在「收藏」里能找到" } : { text: "已取消收藏", undo: () => toggleFavorite(id) });
+    if (!on) show({ text: "已取消收藏", undo: () => toggleFavorite(id) });
   };
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -186,7 +186,7 @@ export default function DiscoverScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="搜菜名、食材，比如「南瓜」"
+            placeholder="搜菜名或食材"
             placeholderTextColor={colors.placeholder}
             style={styles.searchInput}
             returnKeyType="search"
@@ -337,7 +337,7 @@ export default function DiscoverScreen() {
         {list.length === 0 ? (
           <View style={styles.empty}>
             <AppText size={14} color={colors.muted} style={{ textAlign: "center" }}>
-              没找到这道菜，换个关键词试试
+              没找到这道菜
             </AppText>
             <Pressable
               onPress={() => router.push("/create-recipe")}
@@ -345,7 +345,7 @@ export default function DiscoverScreen() {
               style={{ marginTop: spacing.md }}
               accessibilityRole="button"
             >
-              <AppText size={14} weight="700" color={colors.accentText}>或者自己新建一道 →</AppText>
+              <AppText size={14} weight="700" color={colors.accentText}>自己新建一道 →</AppText>
             </Pressable>
           </View>
         ) : (

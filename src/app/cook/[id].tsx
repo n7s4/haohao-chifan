@@ -37,7 +37,7 @@ import {
   scheduleStepDone,
 } from "../../lib/cookNotify";
 import { CookSession, clearCookSession, loadCookSession, saveCookSession } from "../../lib/cookSession";
-import { useStore } from "../../state/store";
+import { toKey, useStore } from "../../state/store";
 import { colors, motion, radius, shadow, spacing } from "../../theme";
 
 const DEEP = colors.deep;
@@ -45,7 +45,6 @@ const FLOAT = colors.deepRaised;
 const DIM = colors.onDeepBody;
 const SUB = colors.onDeepSub;
 const HINT = colors.onDeepHint;
-const LABEL = colors.onDeepLabel;
 const GLASS = "rgba(255,255,255,0.08)";
 
 const formatTime = (seconds: number) => {
@@ -62,7 +61,7 @@ export default function CookScreen() {
     resume?: string;
   }>();
   const insets = useSafeAreaInsets();
-  const { favorites, toggleFavorite, setMeal, selectedDate, ratings, rateRecipe, logCooked, cookedThisWeek, findRecipe } =
+  const { favorites, toggleFavorite, setMeal, ratings, rateRecipe, logCooked, cookedThisWeek, findRecipe } =
     useStore();
   const recipe = findRecipe(id);
   useKeepAwake();
@@ -342,21 +341,18 @@ export default function CookScreen() {
   }
 
   // 三支分开写：不可用 ≠ 用户关过通知，别把责任推给用户。
-  const notifyUnavailable = (!notificationsSupported || perm === "unavailable") && !finished;
   const notifyDenied = notificationsSupported && perm === "denied" && !finished;
   const notifyAsking = notificationsSupported && perm === "undetermined" && showEnableRow && !finished;
 
   const notifySlot =
-    notifyUnavailable || notifyDenied || notifyAsking ? (
+    notifyDenied || notifyAsking ? (
       <View style={styles.notifyRow}>
         <AppText size={12} color={SUB} style={{ flex: 1 }}>
-          {notifyUnavailable
-            ? "到点只在 App 里提示，离开后会错过"
-            : notifyDenied
-              ? "提醒已关闭，到点只在前台提示"
-              : "离开 App 也能收到到点提醒"}
+          {notifyDenied
+              ? "到点提醒已关闭"
+              : "离开 App 也能收到提醒"}
         </AppText>
-        {notifyUnavailable ? null : notifyDenied ? (
+        {notifyDenied ? (
           <Pressable onPress={openNotificationSettings} hitSlop={8} accessibilityLabel="去系统设置打开通知">
             <AppText size={13} weight="700" color={colors.sun}>去设置</AppText>
           </Pressable>
@@ -379,11 +375,13 @@ export default function CookScreen() {
   const hint = paused
     ? done
       ? isLast
-        ? "最后一步到点啦，点「完成这道菜」"
-        : "这一步到点啦，点 › 进入下一步"
-      : "计时已暂停 · 锅在打盹"
-    : "锅在忙，到点会叫你";
+        ? "到点啦，可以出锅了"
+        : "到点啦，下一步"
+      : "已暂停"
+    : "到点会叫你";
   const minutesUsed = Math.max(1, Math.round(elapsedTotal / 60));
+  const hourNow = new Date().getHours();
+  const nowSlot = hourNow < 10 ? "早餐" : hourNow < 15 ? "午餐" : "晚餐";
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + spacing.sm }]}>
@@ -487,12 +485,10 @@ export default function CookScreen() {
             ) : null}
 
             <View style={styles.footer}>
-              <AppText size={12} color={LABEL}>
-                已完成 {step} 步，还剩 {Math.max(0, total - step - 1)} 步
-              </AppText>
+              <View />
               <Pressable onPress={() => setShowAll(true)} hitSlop={10} accessibilityLabel="查看全部步骤">
                 <AppText size={12} weight="700" color={colors.sun}>
-                  查看全部步骤 →
+                  全部步骤 →
                 </AppText>
               </Pressable>
             </View>
@@ -577,13 +573,13 @@ export default function CookScreen() {
             <Pressable
               style={styles.darkBtn}
               onPress={() => {
-                setMeal(selectedDate, "午餐", recipe.id);
+                setMeal(toKey(new Date()), nowSlot, recipe.id);
                 setFinished(false);
                 router.back();
               }}
             >
               <AppText size={15} weight="700" color={colors.white}>
-                记入今日午餐
+                {`记入今天${nowSlot}`}
               </AppText>
             </Pressable>
             <Pressable
@@ -678,7 +674,7 @@ export default function CookScreen() {
               先不做了吗？
             </AppText>
             <AppText size={14} color={colors.muted} style={{ marginTop: 6, lineHeight: 21 }}>
-              第 {step + 1} 步 · 已用时 {formatTime(elapsedTotal)}，进度会自动保存。
+              第 {step + 1} 步 · 已用时 {formatTime(elapsedTotal)}
             </AppText>
             <Pressable style={styles.darkBtn} onPress={() => setShowExit(false)}>
               <AppText size={15} weight="700" color={colors.white}>

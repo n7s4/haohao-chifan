@@ -520,7 +520,6 @@ export default function ShoppingListScreen() {
         if (pending.length === 1 && pending[0].id === item.id) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         }
-        showToast(`${item.name} 已买`, { label: "撤销", run: () => toggleChecked(item.id) });
       }
     }, reduced ? 0 : FLIP_DELAY);
     flipTimers.current.set(item.id, timer);
@@ -588,9 +587,9 @@ export default function ShoppingListScreen() {
 
   const summaryText =
     total === 0 && carriedCount > 0
-      ? `${carriedCount} 项已带到下周，这一周不用再买了`
+      ? `${carriedCount} 项已带到下周`
       : total === 0
-        ? `${range} · 还没有要买的`
+        ? range
         : allBought
           ? "全部买齐了，开火吧"
           : `还差 ${pending.length} 样 · ${range}`;
@@ -620,8 +619,9 @@ export default function ShoppingListScreen() {
         </AppText>
         <Pressable
           onPress={share}
+          disabled={pending.length === 0}
           hitSlop={6}
-          style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+          style={({ pressed }) => [styles.iconBtn, pending.length === 0 && { opacity: 0.3 }, pressed && styles.iconBtnPressed]}
           accessibilityRole="button"
           accessibilityLabel="分享清单"
         >
@@ -672,7 +672,7 @@ export default function ShoppingListScreen() {
                 }}
                 onFocus={() => setNameFocused(true)}
                 onBlur={() => setNameFocused(false)}
-                placeholder="食材名称，例如 香菜"
+                placeholder="加一样要买的"
                 placeholderTextColor={colors.placeholder}
                 style={[
                   styles.field,
@@ -709,7 +709,7 @@ export default function ShoppingListScreen() {
               <TextInput
                 value={qty}
                 onChangeText={setQtyInput}
-                placeholder="数量（可不填）"
+                placeholder="数量"
                 keyboardType="decimal-pad"
                 placeholderTextColor={colors.placeholder}
                 style={[styles.field, styles.fieldSmall, { flex: 3 }]}
@@ -764,10 +764,10 @@ export default function ShoppingListScreen() {
             </AppText>
             <AppText size={13} color={colors.muted} style={{ marginTop: 6, textAlign: "center" }}>
               {carriedCount > 0
-                ? `没买的 ${carriedCount} 项已带到下周，可从底部撤销`
+                ? `${carriedCount} 项已带到下周`
                 : total > 0
-                  ? "勾掉的食材都在下面的「已购买」里，随时可以撤销"
-                  : "给这一周排几道菜，食材会自动进清单"}
+                  ? "勾掉的在下面「已购买」里"
+                  : "排好菜，食材自动进清单"}
             </AppText>
           </Animated.View>
         ) : null}
@@ -801,9 +801,6 @@ export default function ShoppingListScreen() {
                 ))}
               </Animated.View>
             ) : null}
-            <AppText size={11} color={colors.muted} style={{ marginTop: 6 }}>
-              移除只影响这一周的清单，菜单和收藏都没动
-            </AppText>
           </View>
         ) : null}
 
@@ -882,7 +879,7 @@ export default function ShoppingListScreen() {
             accessibilityRole="button"
           >
             <AppText size={15} weight="700" color={colors.white} numberOfLines={1}>
-              {pending.length > 0 ? "完成" : "完成，返回菜单"}
+              {pending.length > 0 ? "完成" : "完成"}
             </AppText>
           </Pressable>
         </View>
@@ -921,7 +918,7 @@ export default function ShoppingListScreen() {
       {resetOpen ? (
         <ConfirmDialog
           title="撤销本周已买？"
-          message={`这周勾掉的 ${bought.length} 项会回到待买，下周不受影响。已手改的数量不会丢。`}
+          message={`${bought.length} 项会回到待买。`}
           confirmLabel="撤销本周已买"
           destructive
           onCancel={() => setResetOpen(false)}
@@ -935,7 +932,7 @@ export default function ShoppingListScreen() {
       {carryOpen ? (
         <ConfirmDialog
           title={`把未买的 ${pending.length} 项带到下周？`}
-          message="只搬还没勾选的食材，下周已经有的同类会合并数量，已买的不动，也不会覆盖下周的菜单。"
+          message="同类食材会合并数量，不影响下周菜单。"
           confirmLabel="带到下周"
           onCancel={() => setCarryOpen(false)}
           onConfirm={() => {

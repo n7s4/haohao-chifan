@@ -82,9 +82,9 @@ export function AddToPlanSheet({
   } else if (current) {
     warn = true;
     const name = current.name.length > 12 ? `${current.name.slice(0, 12)}…` : current.name;
-    info = `这一餐现在是「${name}」，放进去会替换掉`;
+    info = `会替换掉「${name}」`;
   } else {
-    info = shoppingCount ? `${shoppingCount} 样食材会进采购清单` : "这一餐还空着";
+    info = shoppingCount ? `${shoppingCount} 样食材进采购清单` : "这一餐还空着";
   }
 
   // 根节点用 Fragment：遮罩和面板都是父容器的直接子节点，卸载时两者的 exiting 动画都能跑完。

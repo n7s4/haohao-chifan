@@ -271,14 +271,14 @@ export default function CreateRecipeScreen() {
     if (picking) return;
     const images = target === "cover" ? (cover ? 1 : 0) : steps.find((row) => row.key === target)?.images?.length ?? 0;
     if (images >= 9) {
-      setError("一张图放 9 张就够了，再多建议拆成两步");
+      setError("每一步最多 9 张图");
       return;
     }
     // 换封面不增加总量；新加才挡。一道菜几百兆会拖垮 outbox。
     const addingNew = target === "cover" ? !cover : true;
     const total = (cover ? 1 : 0) + steps.reduce((sum, row) => sum + (row.images?.length ?? 0), 0);
     if (addingNew && total >= 40) {
-      setError("一道菜最多 40 张图，已经够用了");
+      setError("一道菜最多 40 张图");
       return;
     }
     setPicking(true);
@@ -434,10 +434,10 @@ export default function CreateRecipeScreen() {
     const picked = [draft.coverUri ? "成品图" : "", stepImageCount ? `${stepImageCount} 张步骤图` : ""].filter(Boolean);
     showText(
       frameCount
-        ? `解析好了，正在从视频里截 ${frameCount} 张步骤图，检查一下再保存`
+        ? `解析好了，正在截取 ${frameCount} 张步骤图`
         : picked.length
-          ? `解析好了，配上了${picked.join("和")}，检查一下再保存`
-          : "解析好了，检查一下再保存"
+          ? `解析好了，配上了${picked.join("和")}`
+          : "解析好了，核对后保存"
     );
   };
 
@@ -463,7 +463,7 @@ export default function CreateRecipeScreen() {
     }
     const allRows = [...parsedIngredients, ...parsedSeasonings];
     if (allRows.some((item) => item.qty !== null && !Number.isFinite(item.qty))) {
-      fail("数量只能填数字，或者留空");
+      fail("数量只能填数字");
       return;
     }
     const parsedSteps = steps
@@ -501,7 +501,7 @@ export default function CreateRecipeScreen() {
         </View>
         <AppText size={20} weight="800" style={{ marginTop: spacing.lg }}>这道菜不能编辑</AppText>
         <AppText size={14} color={colors.muted} style={{ marginTop: spacing.sm, lineHeight: 21 }}>
-          只有自己录入的菜谱可以改，系统自带的菜谱是只读的。
+          只能编辑自己建的菜谱
         </AppText>
         <PressScale onPress={leaveNow} style={[styles.darkBtn, { marginTop: spacing.xxl }]} accessibilityRole="button">
           <AppText size={16} weight="700" color={colors.white}>返回</AppText>
@@ -585,7 +585,7 @@ export default function CreateRecipeScreen() {
             <Animated.View entering={FadeInDown.duration(motion.duration.slow)} style={styles.aiNote}>
               <SparkleIcon size={18} color={colors.sunText} />
               <AppText size={13} color={colors.sunText} style={{ flex: 1, lineHeight: 19 }}>
-                整理自公开笔记，请核对用量和步骤再保存。
+                AI 整理，请核对用量
               </AppText>
             </Animated.View>
           ) : null}
@@ -615,7 +615,6 @@ export default function CreateRecipeScreen() {
             >
               <ImageIcon size={28} color={colors.muted} />
               <AppText size={14} weight="600" color={colors.muted}>添加成品图</AppText>
-              <AppText size={11} color={colors.placeholder}>有图的话，详情页和首页都用它当封面</AppText>
             </PressScale>
           )}
           <View style={styles.coverActions}>
@@ -663,7 +662,7 @@ export default function CreateRecipeScreen() {
           </View>
 
           <View style={styles.group}>
-            <Label hint="分钟 · 可不填" ai={aiFilled.minutes}>大概用时</Label>
+            <Label hint="可不填" ai={aiFilled.minutes}>大概用时</Label>
             <MinutesStepper
               value={minutes}
               flashRun={typingFor("minutes")?.run ?? 0}
@@ -675,7 +674,7 @@ export default function CreateRecipeScreen() {
           </View>
 
           <View style={styles.group}>
-            <Label hint="会算进本周采购清单" ai={aiFilled.ingredients}>食材</Label>
+            <Label hint="会进采购清单" ai={aiFilled.ingredients}>食材</Label>
             {ingredients.map((item) => (
               <IngredientRow
                 key={item.key}
@@ -700,12 +699,12 @@ export default function CreateRecipeScreen() {
               }}
             />
             <AppText size={12} color={colors.muted} style={styles.footnote}>
-              单位写 g、ml、个、瓣都行；数量留空表示「适量」。
+              数量留空即「适量」
             </AppText>
           </View>
 
           <View style={styles.group}>
-            <Label hint="只记在菜谱里，不进采购清单" ai={aiFilled.seasonings}>调料</Label>
+            <Label hint="不进采购清单" ai={aiFilled.seasonings}>调料</Label>
             {seasonings.map((item) => (
               <IngredientRow
                 key={item.key}
@@ -768,9 +767,6 @@ export default function CreateRecipeScreen() {
                 setSteps((current) => [...current, emptyStep()]);
               }}
             />
-            <AppText size={12} color={colors.muted} style={styles.footnote}>
-              步骤不填也能保存，之后做的时候照着记忆来。
-            </AppText>
           </View>
           {editable ? (
             <PressScale
@@ -791,7 +787,7 @@ export default function CreateRecipeScreen() {
       {confirmLeave ? (
         <ConfirmDialog
           title="这道菜还没保存"
-          message="现在离开，刚填的菜名、食材和步骤都会丢掉。"
+          message="刚填的内容会丢失。"
           cancelLabel="继续填"
           confirmLabel="丢弃并离开"
           destructive
@@ -805,7 +801,7 @@ export default function CreateRecipeScreen() {
       {confirmDelete && editing ? (
         <ConfirmDialog
           title={`删除「${editing.name}」？`}
-          message="删掉后菜谱和配图都会清掉，计划里排了这道菜的餐位也会空出来，其他设备同步后一起消失。"
+          message="计划里的这道菜也会一起移除。"
           cancelLabel="留着"
           confirmLabel="删除"
           destructive
