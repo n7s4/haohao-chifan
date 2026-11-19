@@ -250,9 +250,13 @@ export async function withdrawRecipe(client: SupabaseClient, communityId: string
   return cleared.ok ? okVoid : cleared;
 }
 
-/** 启动时调用：作者自己 withdrawn 的菜（含删菜触发器撤回的）若公开桶还有图就删掉。尽力而为，不报错。 */
+/**
+ * 启动时调用：作者自己 withdrawn（含删菜触发器撤回的）或被管理员 removed 的菜，若公开桶还有图就删掉。
+ * 作者能读自己的所有行；公开桶的删策略对 removed 也放行。尽力而为，不报错。
+ */
 export async function cleanupWithdrawnMedia(client: SupabaseClient, userId: string): Promise<void> {
-  const { data, error } = await client.from(TABLE).select("id").eq("author_id", userId).eq("status", "withdrawn");
+  const { data, error } = await client.from(TABLE).select("id").eq("author_id", userId)
+    .in("status", ["withdrawn", "removed"]);
   if (error || !data) return;
   for (const r of data) await clearPublicFolder(client, str(r.id));
 }

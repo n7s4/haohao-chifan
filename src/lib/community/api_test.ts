@@ -12,6 +12,7 @@ import type { Recipe } from "../../data/recipes.ts";
 import { fromSnapshot } from "./logic.ts";
 import {
   addComment,
+  cleanupWithdrawnMedia,
   copyToPrivate,
   deleteComment,
   findMyPublication,
@@ -198,6 +199,17 @@ Deno.test({
       assertEquals(await deleteComment(b.client, c.value.id), { ok: true, value: undefined });
       assertEquals(await deleteComment(b.client, c.value.id), { ok: true, value: undefined });
 
+      // 公开桶不能被列举：anon 什么都列不出，B 列不出 avatars/（已发布菜的目录登录用户可读，存菜要复制）；A 自己能列
+      const anon = createClient(url, anonKey, noSession);
+      for (const folder of [cr.id, "avatars", ""]) {
+        const l = await anon.storage.from("community-media").list(folder);
+        assertEquals(l.data ?? [], [], `anon list "${folder}"`);
+      }
+      const bAvatars = await b.client.storage.from("community-media").list("avatars");
+      assertEquals(bAvatars.data ?? [], [], "B 列不出 avatars/");
+      const own = await a.client.storage.from("community-media").list(cr.id);
+      assertEquals(own.data?.length, 1);
+
       // A 撤回 → 图拿不到；B 看不到菜、不能评论、不能取消赞
       assertEquals(await withdrawRecipe(a.client, cr.id), { ok: true, value: undefined });
       const gone = await status(publicUrl);
@@ -209,6 +221,49 @@ Deno.test({
       if (privatePaths.length) await admin.storage.from("recipe-media").remove(privatePaths);
       await admin.auth.admin.deleteUser(a.id);
       await admin.auth.admin.deleteUser(b.id);
+    }
+  },
+});
+
+Deno.test({
+  name: "community api: admin removed → author's app cleans public media",
+  ignore: !enabled,
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn: async () => {
+    assert(anonKey && serviceKey, "SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY 未设置");
+    const admin = createClient(url, serviceKey, noSession);
+    const a = await makeUser(admin, "removed");
+    const privatePaths: string[] = [];
+    try {
+      const recipeId = crypto.randomUUID();
+      const imageId = crypto.randomUUID();
+      const privatePath = `${a.id}/${recipeId}/${imageId}.jpg`;
+      privatePaths.push(privatePath);
+      assertEquals((await a.client.storage.from("recipe-media").upload(privatePath, JPEG, { contentType: "image/jpeg" })).error, null);
+      const pub = await publishRecipe(a.client, a.id, {
+        id: recipeId, name: "要被下架的菜", subtitle: "", description: "", minutes: 1, difficulty: "简单",
+        calories: 0, tags: [], cover: { id: imageId, path: privatePath, width: 1, height: 1 },
+        ingredients: [], steps: [{ text: "x" }], custom: true,
+      });
+      assert(pub.ok, JSON.stringify(pub));
+      const publicUrl = a.client.storage.from("community-media").getPublicUrl(pub.value.recipe.cover!.path!).data.publicUrl;
+      assertEquals(await status(publicUrl), 200);
+
+      // 管理员下架（service role 等同 Dashboard）
+      const rm = await admin.from("community_recipes").update({ status: "removed" }).eq("id", pub.value.id);
+      assertEquals(rm.error, null);
+      // 作者不能再往里写
+      const up = await a.client.storage.from("community-media")
+        .upload(`${pub.value.id}/new.jpg`, JPEG, { contentType: "image/jpeg" });
+      assert(up.error !== null, "removed 的目录不能再上传");
+      // 作者下次启动清理 → 公开图删掉
+      await cleanupWithdrawnMedia(a.client, a.id);
+      const gone = await status(publicUrl);
+      assert(gone === 400 || gone === 404, `expected 400/404, got ${gone}`);
+    } finally {
+      if (privatePaths.length) await admin.storage.from("recipe-media").remove(privatePaths);
+      await admin.auth.admin.deleteUser(a.id);
     }
   },
 });

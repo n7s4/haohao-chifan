@@ -2,7 +2,7 @@
 begin;
 set local client_min_messages = warning;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(44);
 
 -- 测试用户：A、B（直接写 auth.users；handle_new_user 会顺带建 profiles）
 insert into auth.users (id, instance_id, aud, role, email) values
@@ -140,10 +140,44 @@ set local request.jwt.claims = '{"sub":"22222222-2222-4222-8222-222222222222","r
 select throws_ok(
   $$insert into storage.objects (bucket_id, name) values ('community-media', 'aaaaaaaa-0000-4000-8000-000000000004/img2.jpg')$$,
   '42501', null, 'B 不能往 A 的社区菜目录写图');
+select is(
+  (select count(*)::int from storage.objects where bucket_id = 'community-media'),
+  0, 'B 列不出 A 未发布的社区菜图片和 A 的头像');
+-- B 的已发布菜 R3 有一张图
+reset role;
+insert into storage.objects (bucket_id, name) values ('community-media', 'aaaaaaaa-0000-4000-8000-000000000003/pub.jpg');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+select is(
+  (select count(*)::int from storage.objects where bucket_id = 'community-media' and name like 'aaaaaaaa-0000-4000-8000-000000000003/%'),
+  1, '登录用户能读已发布菜的图（存到我的菜谱要复制）');
 set local role anon;
 select is(
   (select count(*)::int from storage.objects where bucket_id = 'community-media'),
-  2, 'anon 可读公开桶对象');
+  0, 'anon 不能列公开桶（公开 URL 不需要 select）');
+
+-- 被下架（removed）的菜：作者只能删图，不能写 / 改
+reset role;
+set local storage.allow_delete_query = 'true';
+insert into storage.objects (bucket_id, name) values
+  ('community-media', 'aaaaaaaa-0000-4000-8000-000000000002/old1.jpg'),
+  ('community-media', 'aaaaaaaa-0000-4000-8000-000000000002/old2.jpg');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+select is(
+  (select count(*)::int from storage.objects where bucket_id = 'community-media'),
+  5, 'A 能列自己的社区菜目录（含 removed）、自己的头像和已发布菜的图');
+with u as (update storage.objects set name = 'aaaaaaaa-0000-4000-8000-000000000002/moved.jpg'
+           where bucket_id = 'community-media' and name = 'aaaaaaaa-0000-4000-8000-000000000002/old1.jpg' returning 1)
+select is(count(*)::int, 0, 'removed 的菜目录作者不能改') from u;
+with u as (delete from storage.objects
+           where bucket_id = 'community-media' and name = 'aaaaaaaa-0000-4000-8000-000000000002/old1.jpg' returning 1)
+select is(count(*)::int, 1, 'removed 的菜目录作者可以删图') from u;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated"}';
+with u as (delete from storage.objects
+           where bucket_id = 'community-media' and name = 'aaaaaaaa-0000-4000-8000-000000000002/old2.jpg' returning 1)
+select is(count(*)::int, 0, 'B 不能删 A 的图') from u;
 
 select * from finish();
 rollback;

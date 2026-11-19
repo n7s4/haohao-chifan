@@ -48,6 +48,13 @@ returning id, name, status;
 
 下架后：公开列表、详情、评论都看不到；作者仍能在自己的发布记录里看到这条（`removed`），但不能再改它，也不能往它的目录上传图片。
 
+**接着删掉公开图片。** `community-media` 是公开桶，下架只改了行状态，`<community_recipe_id>/` 下的图片仍能通过公开 URL 访问，要手动删：
+
+- Dashboard → Storage → `community-media` → 打开 `<community_recipe_id>` 文件夹，全选删除；或
+- 用 service role 调 Storage API（`supabase.storage.from('community-media').list('<community_recipe_id>')` 后 `remove(paths)`）。不要直接 `delete from storage.objects`：那样只删元数据、不删文件（本地栈的触发器也会拒绝）。
+
+作者的 App 下次启动时也会清理这个目录（`cleanupWithdrawnMedia` 覆盖 `withdrawn` 和 `removed`，Storage 策略允许作者删除已下架菜的图），但作者可能很久不打开 App，所以管理员这一步不要省。
+
 ## 3. 隐藏评论
 
 ```sql

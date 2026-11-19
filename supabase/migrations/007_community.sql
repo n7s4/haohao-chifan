@@ -180,16 +180,63 @@ on conflict (id) do update
 
 drop policy if exists community_media_read on storage.objects;
 drop policy if exists community_media_author_rw on storage.objects;
+drop policy if exists community_media_own_select on storage.objects;
+drop policy if exists community_media_author_insert on storage.objects;
+drop policy if exists community_media_author_update on storage.objects;
+drop policy if exists community_media_author_delete on storage.objects;
 
-create policy community_media_read on storage.objects
-  for select to anon, authenticated using (bucket_id = 'community-media');
-
--- 可写 / 可删路径：
---   {community_recipe_id}/…：该行存在、本人是作者、未被下架（withdrawn 也行：客户端先建行再传图）
+-- 桶是 public：看图走公开 URL，不经过 RLS，所以 select 不对外开放（否则 anon 能列出所有对象、
+-- 枚举头像 = 枚举用户）。select 只给本人：自己社区菜的目录（任何状态，发布 / 清理时要列目录）
+-- 和自己的头像（upsert 要读）。
+-- 路径规则：
+--   {community_recipe_id}/…：本人是该社区菜的作者
 --   avatars/{auth.uid()}.jpg：本人的公开头像
+-- 写（insert / update）另外要求菜未被下架（withdrawn 也行：客户端先建行再传图）；
+-- 删不看状态：管理员下架（removed）后作者的 App 仍能把图删掉。
 -- 注意：子查询里必须写 objects.name —— community_recipes 也有 name 列，裸写会被解析成 c.name。
-create policy community_media_author_rw on storage.objects
-  for all to authenticated
+create policy community_media_own_select on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'community-media' and (
+      name = 'avatars/' || auth.uid()::text || '.jpg'
+      or exists (
+        select 1 from public.community_recipes c
+        where c.id::text = (storage.foldername(objects.name))[1]
+          and c.author_id = auth.uid()
+      )
+    )
+  );
+
+-- 「存到我的菜谱」由登录用户把公开桶的图复制到自己的私有桶，Storage 的 copy 要求能 select 源对象。
+-- 所以已发布（published）的社区菜目录对登录用户可读——这些图本来就公开；anon 仍不能列。
+drop policy if exists community_media_published_select on storage.objects;
+create policy community_media_published_select on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'community-media'
+    and exists (
+      select 1 from public.community_recipes c
+      where c.id::text = (storage.foldername(objects.name))[1]
+        and c.status = 'published'
+    )
+  );
+
+create policy community_media_author_insert on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'community-media' and (
+      name = 'avatars/' || auth.uid()::text || '.jpg'
+      or exists (
+        select 1 from public.community_recipes c
+        where c.id::text = (storage.foldername(objects.name))[1]
+          and c.author_id = auth.uid()
+          and c.status <> 'removed'
+      )
+    )
+  );
+
+create policy community_media_author_update on storage.objects
+  for update to authenticated
   using (
     bucket_id = 'community-media' and (
       name = 'avatars/' || auth.uid()::text || '.jpg'
@@ -209,6 +256,19 @@ create policy community_media_author_rw on storage.objects
         where c.id::text = (storage.foldername(objects.name))[1]
           and c.author_id = auth.uid()
           and c.status <> 'removed'
+      )
+    )
+  );
+
+create policy community_media_author_delete on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'community-media' and (
+      name = 'avatars/' || auth.uid()::text || '.jpg'
+      or exists (
+        select 1 from public.community_recipes c
+        where c.id::text = (storage.foldername(objects.name))[1]
+          and c.author_id = auth.uid()
       )
     )
   );
