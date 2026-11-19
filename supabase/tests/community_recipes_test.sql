@@ -2,7 +2,7 @@
 begin;
 set local client_min_messages = warning;
 create extension if not exists pgtap with schema extensions;
-select plan(44);
+select plan(48);
 
 -- 测试用户：A、B（直接写 auth.users；handle_new_user 会顺带建 profiles）
 insert into auth.users (id, instance_id, aud, role, email) values
@@ -35,6 +35,14 @@ values ('aaaaaaaa-0000-4000-8000-000000000001', '11111111-1111-4111-8111-1111111
 select is((select like_count from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000001'), 0, 'insert 时 like_count 被强制为 0');
 select is((select comment_count from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000001'), 0, 'insert 时 comment_count 被强制为 0');
 select isnt((select published_at from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000001'), null, '发布时写入 published_at');
+-- 客户端不能伪造时间戳（「最新」排序靠它们）
+insert into public.community_recipes (id, author_id, source_recipe_id, name, created_at, published_at)
+values ('aaaaaaaa-0000-4000-8000-000000000005', '11111111-1111-4111-8111-111111111111', 'r5', '穿越', '2999-01-01', '2999-01-01');
+select is((select created_at from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000005'), now(), 'insert 时 created_at 由服务端写');
+select is((select published_at from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000005'), now(), 'insert 时 published_at 由服务端写');
+update public.community_recipes set created_at = '2999-01-01', published_at = '2999-01-01' where id = 'aaaaaaaa-0000-4000-8000-000000000005';
+select is((select created_at from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000005'), now(), 'update 不能改 created_at');
+select is((select published_at from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000005'), now(), 'update 不能改 published_at');
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated"}';

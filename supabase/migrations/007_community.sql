@@ -76,12 +76,14 @@ begin
     if tg_op = 'INSERT' then
       new.like_count := 0;
       new.comment_count := 0;
+      new.created_at := now();   -- 「最新」排序靠服务端时间，客户端不能伪造
     else
       if old.status = 'removed' then
         raise exception 'community recipe % has been removed', old.id using errcode = 'check_violation';
       end if;
       new.like_count := old.like_count;
       new.comment_count := old.comment_count;
+      new.created_at := old.created_at;
     end if;
     if new.builtin then
       raise exception 'builtin must be false' using errcode = 'check_violation';
@@ -500,6 +502,7 @@ begin
     if v_client then
       new.deleted := false;
       new.hidden := false;
+      new.created_at := now();   -- 评论按时间排序，客户端不能伪造
     end if;
     if new.parent_id is not null then
       select * into v_parent from public.community_comments where id = new.parent_id;

@@ -2,7 +2,7 @@
 begin;
 set local client_min_messages = warning;
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(46);
 
 -- 测试用户：A（作者）、B、C
 insert into auth.users (id, instance_id, aud, role, email) values
@@ -79,6 +79,9 @@ select is((select comment_count from public.community_recipes where id = 'aaaaaa
 insert into public.community_comments (id, community_recipe_id, user_id, body) values ('cccccccc-0000-4000-8000-000000000003', 'aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', '要被删的');
 insert into public.community_comments (id, community_recipe_id, user_id, body) values ('cccccccc-0000-4000-8000-000000000004', 'aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', 'A 来删');
 select is((select comment_count from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000011'), 4, '再评两条 comment_count = 4');
+insert into public.community_comments (id, community_recipe_id, user_id, body, created_at) values ('cccccccc-0000-4000-8000-000000000006', 'aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', '穿越', '2999-01-01');
+select is((select created_at from public.community_comments where id = 'cccccccc-0000-4000-8000-000000000006'), now(), '客户端不能伪造评论 created_at');
+update public.community_comments set deleted = true where id = 'cccccccc-0000-4000-8000-000000000006';
 
 -- 删除（软删）
 update public.community_comments set deleted = true where id = 'cccccccc-0000-4000-8000-000000000003';
