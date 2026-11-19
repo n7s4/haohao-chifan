@@ -317,3 +317,40 @@ export function publishMenu(publication: Pick<CommunityRecipe, "status"> | null)
   if (publication.status === "published") return ["update", "withdraw", "view"];
   return [];
 }
+
+export type FavoriteEntry =
+  | { kind: "local"; id: string }
+  | { kind: "community"; favId: string; cr: CommunityRecipe }
+  | { kind: "removed"; favId: string }
+  | { kind: "unloaded"; favId: string; failed: boolean };
+
+export type CommunityFetch = { state: "loading" } | { state: "failed" } | { state: "ok"; rows: CommunityRecipe[] };
+
+/**
+ * 收藏页：按收藏顺序把本地菜和社区菜合在一起。本地查不到的收藏跳过（和原来一致）。
+ * 社区菜只有拉取成功却没返回时才算「已下架」；加载中 / 拉取失败是中性的「未加载」，绝不当成下架。
+ */
+export function mergeFavoriteEntries(
+  favorites: string[],
+  localIds: Set<string>,
+  community: CommunityFetch,
+): FavoriteEntry[] {
+  const byId = new Map<string, CommunityRecipe>();
+  if (community.state === "ok") for (const cr of community.rows) byId.set(cr.id, cr);
+  const seen = new Set<string>();
+  const out: FavoriteEntry[] = [];
+  for (const fav of favorites) {
+    const cid = parseCommunityFavoriteId(fav);
+    if (cid === null) {
+      if (localIds.has(fav)) out.push({ kind: "local", id: fav });
+      continue;
+    }
+    if (seen.has(fav)) continue;
+    seen.add(fav);
+    const cr = byId.get(cid);
+    if (cr) out.push({ kind: "community", favId: fav, cr });
+    else if (community.state === "ok") out.push({ kind: "removed", favId: fav });
+    else out.push({ kind: "unloaded", favId: fav, failed: community.state === "failed" });
+  }
+  return out;
+}

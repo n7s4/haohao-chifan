@@ -7,6 +7,7 @@ import {
   commentLength,
   commentTime,
   likeAfterLookup,
+  mergeFavoriteEntries,
   mergeFeedPage,
   type CommentRow,
   communityFavoriteId,
@@ -25,6 +26,7 @@ import {
   validateNickname,
 } from "./logic.ts";
 import type { Recipe } from "../../data/recipes.ts";
+import type { CommunityRecipe } from "./logic.ts";
 
 const recipe: Recipe = {
   id: "r1",
@@ -304,4 +306,39 @@ Deno.test("publishMenu：没发过 / 已撤回 → 发布；已发布 → 更新
   assertEquals(publishMenu({ status: "withdrawn" }), ["publish"]);
   assertEquals(publishMenu({ status: "published" }), ["update", "withdraw", "view"]);
   assertEquals(publishMenu({ status: "removed" }), []);
+});
+
+Deno.test("mergeFavoriteEntries: 保持收藏顺序，本地菜和社区菜混排", () => {
+  const cr = { id: "u1" } as CommunityRecipe;
+  const out = mergeFavoriteEntries(
+    ["b1", "community:u1", "gone", "community:u2"],
+    new Set(["b1", "gone"]),
+    { state: "ok", rows: [cr] },
+  );
+  assertEquals(out, [
+    { kind: "local", id: "b1" },
+    { kind: "community", favId: "community:u1", cr },
+    { kind: "local", id: "gone" },
+    { kind: "removed", favId: "community:u2" },
+  ]);
+});
+
+Deno.test("mergeFavoriteEntries: 本地查不到的收藏跳过（和原来一致）", () => {
+  const out = mergeFavoriteEntries(["x", "y"], new Set(["y"]), { state: "ok", rows: [] });
+  assertEquals(out, [{ kind: "local", id: "y" }]);
+});
+
+Deno.test("mergeFavoriteEntries: 拉取失败不算已下架", () => {
+  const out = mergeFavoriteEntries(["a", "community:u1"], new Set(["a"]), { state: "failed" });
+  assertEquals(out, [{ kind: "local", id: "a" }, { kind: "unloaded", favId: "community:u1", failed: true }]);
+});
+
+Deno.test("mergeFavoriteEntries: 加载中显示未加载占位，不算已下架", () => {
+  const out = mergeFavoriteEntries(["community:u1"], new Set(), { state: "loading" });
+  assertEquals(out, [{ kind: "unloaded", favId: "community:u1", failed: false }]);
+});
+
+Deno.test("mergeFavoriteEntries: 重复的社区收藏只出现一次", () => {
+  const out = mergeFavoriteEntries(["community:u1", "community:u1"], new Set(), { state: "failed" });
+  assertEquals(out.length, 1);
 });

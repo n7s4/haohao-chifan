@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, {
   Easing,
@@ -23,6 +23,15 @@ import { coverHeightFor, RecipeTile, splitColumns } from "../../components/Recip
 import { CreateFab } from "../../components/TabBar";
 import { Toast, useToast } from "../../components/Toast";
 import { isQuickRecipe, type Recipe } from "../../data/recipes";
+import { getCommunityRecipes } from "../../lib/community/api";
+import {
+  type CommunityFetch,
+  type CommunityRecipe,
+  type FavoriteEntry,
+  mergeFavoriteEntries,
+  parseCommunityFavoriteId,
+} from "../../lib/community/logic";
+import { getSupabase } from "../../lib/supabase";
 import { useRecipeCoverUris } from "../../lib/useMedia";
 import { useStore } from "../../state/store";
 import { colors, motion, radius, spacing } from "../../theme";
@@ -31,6 +40,7 @@ const GRID_GAP = 12;
 const GRID_PAD = spacing.lg;
 const CARD_MIN_H = 120;
 const CARD_MAX_H = 210;
+const NOTE_CARD_H = 120;
 
 type FilterKey = "all" | "mine" | "made" | "quick";
 
@@ -56,6 +66,59 @@ export default function FavoritesScreen() {
     () => allRecipes.filter((recipe) => favorites.includes(recipe.id)),
     [allRecipes, favorites]
   );
+
+  // 社区菜收藏：进页面 / 收藏变化 / 点重试时一次批量拉取；generation 防止旧响应覆盖新结果。
+  const communityIds = useMemo(
+    () => favorites.map(parseCommunityFavoriteId).filter((id): id is string => id !== null),
+    [favorites]
+  );
+  const idsKey = communityIds.join(",");
+  const [community, setCommunity] = useState<CommunityFetch>({ state: "ok", rows: [] });
+  const [retryTick, setRetryTick] = useState(0);
+  const [coverFailed, setCoverFailed] = useState<Record<string, boolean>>({});
+  const generation = useRef(0);
+  useFocusEffect(
+    useCallback(() => {
+      void retryTick;
+      const gen = ++generation.current;
+      if (!idsKey) {
+        setCommunity({ state: "ok", rows: [] });
+        return;
+      }
+      // 已经有结果时保持原样等新结果，避免取消收藏一条就把其余卡片闪成占位。
+      setCommunity((prev) => (prev.state === "ok" ? prev : { state: "loading" }));
+      (async () => {
+        let next: CommunityFetch;
+        try {
+          const res = await getCommunityRecipes(getSupabase(), idsKey.split(","));
+          next = res.ok ? { state: "ok", rows: res.value } : { state: "failed" };
+        } catch {
+          next = { state: "failed" };
+        }
+        if (gen === generation.current) setCommunity(next);
+      })();
+      return () => {
+        generation.current++;
+      };
+    }, [idsKey, retryTick])
+  );
+
+  const entries = useMemo(
+    () => mergeFavoriteEntries(favorites, new Set(saved.map((r) => r.id)), community),
+    [favorites, saved, community]
+  );
+  const supabase = useMemo(() => {
+    try {
+      return getSupabase();
+    } catch {
+      return null;
+    }
+  }, []);
+  const communityCoverUri = (cr: CommunityRecipe) => {
+    const path = cr.recipe.cover?.path;
+    if (!path || !supabase) return undefined;
+    return supabase.storage.from("community-media").getPublicUrl(path).data.publicUrl;
+  };
   const coverUris = useRecipeCoverUris(saved);
 
   /** 「本周做过」和计划页、「我的」用同一个口径：当前显示周里记过一次就算。 */
@@ -72,25 +135,114 @@ export default function FavoritesScreen() {
     ["quick", "快手菜", isQuickRecipe],
   ];
   const activeFn = filters.find(([key]) => key === filter)![2];
-  const list = saved.filter(activeFn);
+  const recipeById = useMemo(() => new Map(saved.map((r) => [r.id, r])), [saved]);
+  // 社区菜（含已下架 / 未加载占位）只出现在「全部」里；其他筛选只看本地菜。
+  const list = entries.filter((e) => (e.kind === "local" ? activeFn(recipeById.get(e.id)!) : filter === "all"));
+  const totalCount = entries.length;
   const madeCount = saved.filter((r) => madeThisWeek.has(r.id)).length;
 
   const columnWidth = Math.floor((width - GRID_PAD * 2 - GRID_GAP) / 2);
-  const measured = list.map((recipe, index) => ({
-    recipe,
-    index,
-    artHeight: coverHeightFor(recipe.cover, index, columnWidth, CARD_MIN_H, CARD_MAX_H),
-  }));
+  const measured = list.map((entry, index) => {
+    const cover =
+      entry.kind === "local" ? recipeById.get(entry.id)!.cover : entry.kind === "community" ? entry.cr.recipe.cover : undefined;
+    const noteCard = entry.kind === "removed" || entry.kind === "unloaded";
+    return {
+      entry,
+      index,
+      artHeight: noteCard ? NOTE_CARD_H : coverHeightFor(cover, index, columnWidth, CARD_MIN_H, CARD_MAX_H),
+    };
+  });
   const columns = splitColumns(measured, (item) => item.artHeight + 19 + 7 + 17 + 8, GRID_GAP);
 
-  const unfavorite = (recipe: Recipe) => {
+  const unfavorite = (favId: string, name: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    toggleFavorite(recipe.id);
+    toggleFavorite(favId);
     show({
-      text: `已取消收藏「${recipe.name}」`,
-      undo: () => toggleFavorite(recipe.id),
+      text: `已取消收藏${name}`,
+      undo: () => toggleFavorite(favId),
       undoneText: "已放回收藏",
     });
+  };
+
+  const renderEntry = (entry: FavoriteEntry, artHeight: number) => {
+    if (entry.kind === "local") {
+      const recipe = recipeById.get(entry.id)!;
+      return (
+        <RecipeTile
+          recipe={recipe}
+          artHeight={artHeight}
+          columnWidth={columnWidth}
+          coverUri={coverUris[recipe.id]}
+          meta={metaFor(recipe.minutes, recipe.steps.length)}
+          titleSize={14}
+          titleLines={1}
+          badge={recipe.custom ? "自建" : madeThisWeek.has(recipe.id) ? "本周做过" : undefined}
+          showFavorite
+          favorited
+          onToggleFavorite={() => unfavorite(recipe.id, `「${recipe.name}」`)}
+        />
+      );
+    }
+    if (entry.kind === "community") {
+      const { cr } = entry;
+      return (
+        <RecipeTile
+          recipe={{ ...cr.recipe, id: cr.id, custom: false }}
+          artHeight={artHeight}
+          columnWidth={columnWidth}
+          coverUri={communityCoverUri(cr)}
+          coverFailed={coverFailed[cr.id]}
+          onCoverError={() => setCoverFailed((prev) => ({ ...prev, [cr.id]: true }))}
+          stats={{ likes: cr.likeCount, comments: cr.commentCount }}
+          titleSize={14}
+          titleLines={1}
+          showFavorite
+          favorited
+          onToggleFavorite={() => unfavorite(entry.favId, `「${cr.recipe.name}」`)}
+          onPress={() => router.push(`/community/${cr.id}`)}
+        />
+      );
+    }
+    if (entry.kind === "removed") {
+      return (
+        <View style={[styles.noteCard, { height: artHeight }]}>
+          <AppText size={14} weight="700" color={colors.muted}>
+            已下架
+          </AppText>
+          <AppText size={12} color={colors.placeholder} style={{ marginTop: 3, textAlign: "center" }}>
+            作者撤回了这道菜
+          </AppText>
+          <Pressable
+            onPress={() => unfavorite(entry.favId, "已下架的菜")}
+            style={({ pressed }) => [styles.noteBtn, pressed && { transform: [{ scale: 0.97 }] }]}
+            accessibilityRole="button"
+            accessibilityLabel="取消收藏已下架的菜"
+          >
+            <AppText size={13} weight="700" color={colors.ink}>
+              取消收藏
+            </AppText>
+          </Pressable>
+        </View>
+      );
+    }
+    return (
+      <Pressable
+        onPress={() => entry.failed && setRetryTick((n) => n + 1)}
+        disabled={!entry.failed}
+        style={[styles.noteCard, { height: artHeight }]}
+        accessibilityRole="button"
+        accessibilityLabel={entry.failed ? "社区菜暂时加载不出来，点按重试" : "社区菜加载中"}
+      >
+        <AppText size={14} weight="700" color={colors.muted}>
+          {entry.failed ? "暂时加载不出来" : "加载中…"}
+        </AppText>
+        {entry.failed ? (
+          <AppText size={12} color={colors.placeholder} style={{ marginTop: 3 }}>
+            点按重试
+          </AppText>
+        ) : null}
+      </Pressable>
+    );
   };
 
   return (
@@ -105,8 +257,8 @@ export default function FavoritesScreen() {
             收藏
           </AppText>
           <AppText size={14} color={colors.muted} style={{ marginTop: 2 }}>
-            {saved.length > 0
-              ? `${saved.length} 道菜${madeCount > 0 ? ` · ${madeCount} 道本周做过` : ""}`
+            {totalCount > 0
+              ? `${totalCount} 道菜${madeCount > 0 ? ` · ${madeCount} 道本周做过` : ""}`
               : "还没有收藏"}
           </AppText>
         </Animated.View>
@@ -135,7 +287,7 @@ export default function FavoritesScreen() {
                     {label}
                   </AppText>
                   <AppText size={12} weight="700" color={on ? "rgba(255,255,255,0.7)" : colors.placeholder}>
-                    {saved.filter(fn).length}
+                    {fn === filters[0][2] ? totalCount : saved.filter(fn).length}
                   </AppText>
                 </Pressable>
               );
@@ -149,26 +301,14 @@ export default function FavoritesScreen() {
           <View style={styles.grid}>
             {columns.map((bucket, columnIndex) => (
               <View key={`${filter}-${columnIndex}`} style={{ width: columnWidth, gap: GRID_GAP }}>
-                {bucket.map(({ recipe, artHeight, index }) => (
+                {bucket.map(({ entry, artHeight, index }) => (
                   <Animated.View
-                    key={recipe.id}
+                    key={entry.kind === "local" ? entry.id : entry.favId}
                     entering={rise(index + 2)}
                     exiting={ZoomOut.duration(320).easing(Easing.in(Easing.cubic))}
                     layout={LinearTransition.springify().damping(18).stiffness(180)}
                   >
-                    <RecipeTile
-                      recipe={recipe}
-                      artHeight={artHeight}
-                      columnWidth={columnWidth}
-                      coverUri={coverUris[recipe.id]}
-                      meta={metaFor(recipe.minutes, recipe.steps.length)}
-                      titleSize={14}
-                      titleLines={1}
-                      badge={recipe.custom ? "自建" : madeThisWeek.has(recipe.id) ? "本周做过" : undefined}
-                      showFavorite
-                      favorited
-                      onToggleFavorite={() => unfavorite(recipe)}
-                    />
+                    {renderEntry(entry, artHeight)}
                   </Animated.View>
                 ))}
               </View>
@@ -254,6 +394,27 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipPressed: { transform: [{ scale: 0.96 }] },
   grid: { flexDirection: "row", gap: GRID_GAP, paddingHorizontal: GRID_PAD, marginTop: spacing.lg },
+  noteCard: {
+    borderRadius: 22,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+    backgroundColor: colors.canvas,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  noteBtn: {
+    marginTop: 10,
+    height: 34,
+    paddingHorizontal: 16,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   empty: { alignItems: "center", paddingHorizontal: 32, paddingTop: 36 },
   emptyPic: {
     width: 168,
