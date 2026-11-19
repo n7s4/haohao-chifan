@@ -217,10 +217,12 @@ export default function RecipeDetailScreen() {
         show({ text: wasPublished ? "已更新" : "已发布到社区" });
         return;
       }
-      if (r.reason === "invalid") return imagesNotReady();
+      // invalid 只有缺图时才是「图片还在上传」；其余（如服务端 check 不过）按普通失败提示。
+      if (r.reason === "invalid" && missingUploads(recipe) > 0) return imagesNotReady();
       // 失败后重查一次：首次发布中途失败会留下撤回状态的行；被下架时这里会显示「已被下架」。
       const now = await refreshPublication();
       if (now !== "error" && now?.status === "removed") return show({ text: "这道菜已被下架，不能再发布" });
+      if (r.reason === "invalid") return show({ text: "没发出去，稍后再试" });
       show({ text: r.reason === "auth" ? failMessage("auth") : "网络不太好，没发出去" });
     });
   };
