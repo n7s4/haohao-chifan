@@ -129,6 +129,8 @@ export default function RecipeDetailScreen() {
   // 发布状态带着所属账号和菜：换号 / 换菜后自然失效，不用在 effect 里同步清。
   const [pubFor, setPubFor] = useState<{ key: string; cr: CommunityRecipe | null } | null>(null);
   const publication = pubFor !== null && pubFor.key === pubKey ? pubFor.cr : null;
+  /** 还没查到（加载中或查询失败）。游客没有发布状态，算已知（菜单点了去登录）。 */
+  const publicationUnknown = pubKey !== null && (pubFor === null || pubFor.key !== pubKey);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
   /** 发布 / 撤回进行中的提示文案；非 null 时整页挡住，不能重复点。 */
@@ -185,6 +187,19 @@ export default function RecipeDetailScreen() {
     syncNow();
   };
 
+  /** 打开「…」：发布状态未知时先查一次，查不到就不开菜单，免得把已发布的菜当成没发过。 */
+  const onOpenMenu = async () => {
+    if (busyRef.current) return;
+    if (publicationUnknown) {
+      let known = true;
+      await runBusy("正在读取发布状态…", async () => {
+        known = (await refreshPublication()) !== "error";
+      });
+      if (!known) return show({ text: "网络不太好，稍后再试" });
+    }
+    setMenuOpen(true);
+  };
+
   const onPublish = async () => {
     setMenuOpen(false);
     if (!recipe || busyRef.current) return;
@@ -224,8 +239,9 @@ export default function RecipeDetailScreen() {
         show({ text: "已撤回" });
         return;
       }
-      // 状态可能已经改了、只是清图失败；以服务端为准。
-      await refreshPublication();
+      // 状态可能已经改了、只是清图失败（图会在下次启动时清掉）；以服务端为准。
+      const now = await refreshPublication();
+      if (now !== "error" && now?.status !== "published") return show({ text: "已撤回" });
       show({ text: r.reason === "auth" ? failMessage("auth") : "网络不太好，没撤回" });
     });
   };
@@ -408,7 +424,7 @@ export default function RecipeDetailScreen() {
             ? () => router.push({ pathname: "/create-recipe", params: { id: recipe.id } })
             : undefined
         }
-        onMore={recipe.custom && menuActions.length ? () => setMenuOpen(true) : undefined}
+        onMore={recipe.custom && (publicationUnknown || menuActions.length) ? onOpenMenu : undefined}
       />
 
       <View
