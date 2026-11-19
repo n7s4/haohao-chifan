@@ -1,6 +1,7 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 import {
   applyLikeToggle,
+  mergeFeedPage,
   type CommentRow,
   communityFavoriteId,
   communityIdFor,
@@ -220,4 +221,17 @@ Deno.test("communityIdFor: 稳定、uuid 形状、不依赖 crypto.randomUUID", 
   } finally {
     globalThis.crypto.randomUUID = original;
   }
+});
+
+Deno.test("mergeFeedPage: 追加新一页，按 id 去重（翻页期间有新发布导致偏移）", () => {
+  const a = (id: string) => ({ id }) as never;
+  const r = mergeFeedPage([a("1"), a("2")], [a("2"), a("3")], 2);
+  assertEquals(r.items.map((x: { id: string }) => x.id), ["1", "2", "3"]);
+  assertEquals(r.hasMore, true);
+});
+
+Deno.test("mergeFeedPage: 返回不足一页即没有更多", () => {
+  const r = mergeFeedPage([], [{ id: "1" } as never], 20);
+  assertEquals(r.items.length, 1);
+  assertEquals(r.hasMore, false);
 });

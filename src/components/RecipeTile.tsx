@@ -98,6 +98,10 @@ type Props = {
   onToggleFavorite?: () => void;
   /** 实测高度，给贪心分列用；和渲染结果是同一套尺寸。 */
   extraHeight?: number;
+  /** 社区卡片：作者行位置改显 ♥ 点赞数和 💬 评论数。 */
+  stats?: { likes: number; comments: number };
+  /** 覆盖默认的「进菜谱详情」跳转（社区卡片进 /community/[id]）。 */
+  onPress?: () => void;
 };
 
 export function RecipeTile({
@@ -115,6 +119,8 @@ export function RecipeTile({
   showFavorite,
   favorited,
   onToggleFavorite,
+  stats,
+  onPress,
 }: Props) {
   const hasCover = Boolean(recipe.cover);
   const circle = Math.round(Math.min(Math.max(Math.min(columnWidth, artHeight) * 0.6, 78), 128));
@@ -125,7 +131,7 @@ export function RecipeTile({
   return (
     <View style={styles.tile}>
       <Pressable
-        onPress={() => router.push(`/recipe/${recipe.id}`)}
+        onPress={onPress ?? (() => router.push(`/recipe/${recipe.id}`))}
         accessibilityRole="button"
         accessibilityLabel={`查看 ${recipe.name}`}
       >
@@ -178,6 +184,12 @@ export function RecipeTile({
         <AppText size={12} color={colors.muted} numberOfLines={1} style={styles.meta}>
           {meta}
         </AppText>
+      ) : stats ? (
+        <View style={styles.authorRow}>
+          <HeartIcon size={13} color={colors.muted} />
+          <AppText size={11.5} color={colors.muted}>{stats.likes}</AppText>
+          <AppText size={11.5} color={colors.muted} style={{ marginLeft: 6 }}>{`💬 ${stats.comments}`}</AppText>
+        </View>
       ) : (
         <View style={styles.authorRow}>
           {showFavorite ? (

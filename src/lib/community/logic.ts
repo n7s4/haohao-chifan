@@ -235,3 +235,13 @@ export function threadComments(rows: CommentRow[]): { comment: CommentRow; repli
     .filter((t) => !t.comment.deleted || t.replies.length > 0)
     .sort((a, b) => -byTime(a.comment, b.comment));
 }
+
+/** 社区列表翻页：追加并按 id 去重；本页不足 pageSize 条说明到底了。 */
+export function mergeFeedPage<T extends { id: string }>(
+  prev: T[],
+  page: T[],
+  pageSize: number,
+): { items: T[]; hasMore: boolean } {
+  const seen = new Set(prev.map((x) => x.id));
+  return { items: [...prev, ...page.filter((x) => !seen.has(x.id))], hasMore: page.length >= pageSize };
+}

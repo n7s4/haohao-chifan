@@ -41,6 +41,7 @@ import {
   RecipeTile,
   splitColumns,
 } from "../../components/RecipeTile";
+import { CommunityFeed } from "../../components/community/CommunityFeed";
 import { CreateFab, fabCollapsed } from "../../components/TabBar";
 import { Toast, useToast } from "../../components/Toast";
 import {
@@ -90,6 +91,8 @@ export default function DiscoverScreen() {
   const { toast, show, undo } = useToast();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState(0);
+  const [mode, setMode] = useState<"recipes" | "community">("recipes");
+  const [communityOpened, setCommunityOpened] = useState(false);
   const [session, setSession] = useState<CookSession | null>(null);
   const [coverFailed, setCoverFailed] = useState<Record<string, boolean>>({});
 
@@ -150,16 +153,7 @@ export default function DiscoverScreen() {
   const listTitle = query.trim() ? `搜「${query.trim()}」` : filter === 0 ? "全部菜谱" : FILTERS[filter][0];
   const heroFav = heroRecipe ? favorites.includes(heroRecipe.id) : false;
 
-  return (
-    <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: spacing.xxxl + 56 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        onScroll={onScroll}
-        scrollEventThrottle={32}
-      >
-        {/* 问候 */}
+  const helloBlock = (
         <Animated.View entering={rise(0)} style={[styles.hello, { paddingTop: insets.top + spacing.md }]}>
           <View style={{ flex: 1 }}>
             <AppText size={12} weight="700" color={colors.muted} style={styles.eyebrow}>
@@ -179,6 +173,50 @@ export default function DiscoverScreen() {
             <AppText size={17} weight="800">饭</AppText>
           </Pressable>
         </Animated.View>
+  );
+
+  const modeTabs = (
+    <View style={styles.modeTabs} accessibilityRole="tablist">
+      {(["recipes", "community"] as const).map((key) => {
+        const on = mode === key;
+        return (
+          <Pressable
+            key={key}
+            onPress={() => {
+              setMode(key);
+              if (key === "community") setCommunityOpened(true);
+            }}
+            style={[styles.chip, on && styles.chipOn]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+          >
+            <AppText size={14} weight="700" color={on ? colors.white : colors.ink}>
+              {key === "recipes" ? "菜谱" : "社区"}
+            </AppText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
+  return (
+    <View style={styles.screen}>
+      {/* 社区首次打开才挂载；之后和菜谱都保持挂载，来回切不丢滚动位置和筛选。 */}
+      {communityOpened ? (
+        <View style={[styles.pane, mode !== "community" && styles.hidden]}>
+          <CommunityFeed header={<>{helloBlock}{modeTabs}</>} bottomPad={spacing.xxxl + 56} />
+        </View>
+      ) : null}
+      <ScrollView
+        style={mode !== "recipes" && styles.hidden}
+        contentContainerStyle={{ paddingBottom: spacing.xxxl + 56 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onScroll={onScroll}
+        scrollEventThrottle={32}
+      >
+        {helloBlock}
+        {modeTabs}
 
         {/* 搜索 */}
         <Animated.View entering={rise(1)} style={styles.search}>
@@ -547,6 +585,9 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   searchInput: { flex: 1, fontSize: 15, color: colors.ink, paddingVertical: 0 },
+  modeTabs: { flexDirection: "row", gap: 8, paddingHorizontal: PAD, paddingTop: spacing.lg },
+  pane: { flex: 1 },
+  hidden: { display: "none" },
   chips: { gap: 8, paddingHorizontal: PAD, paddingTop: 14 },
   chip: {
     flexDirection: "row",
