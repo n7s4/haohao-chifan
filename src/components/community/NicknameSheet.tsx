@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import Animated, { Easing, FadeIn, SlideInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
 import { AppText, usePressScale } from "../Common";
 import { defaultNickname, validateNickname } from "../../lib/community/logic";
@@ -52,74 +53,76 @@ export function NicknameSheet({
 
   return (
     <Modal transparent animationType="none" visible onRequestClose={onCancel}>
-      <Animated.View entering={backdropIn} style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel="取消" />
-        <Animated.View
-          entering={sheetIn}
-          style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}
-          accessibilityViewIsModal
-        >
-          <View style={styles.grab} />
-          <AppText size={21} weight="800" style={styles.title}>{title}</AppText>
-          <AppText size={13} color={colors.muted} style={styles.hint}>
-            其他人会在你的评论和菜谱上看到这个名字
-          </AppText>
-          <TextInput
-            value={value}
-            onChangeText={(text) => {
-              setValue(text);
-              if (error) setError(null);
-            }}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            placeholder="昵称"
-            placeholderTextColor={colors.placeholder}
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={40}
-            selectTextOnFocus
-            returnKeyType="done"
-            onSubmitEditing={submit}
-            accessibilityLabel="社区昵称"
-            style={[
-              styles.input,
-              IS_ANDROID
-                ? { borderBottomColor: error ? colors.danger : focused ? colors.accent : colors.placeholder }
-                : {
-                    borderColor: error ? colors.danger : focused ? colors.ink : "transparent",
-                    backgroundColor: focused ? colors.surface : colors.surfaceAlt,
-                  },
-            ]}
-          />
-          {error ? (
-            <Animated.View entering={FadeIn.duration(motion.duration.fast)}>
-              <AppText size={13} color={colors.danger} style={styles.errorText}>{error}</AppText>
-            </Animated.View>
-          ) : null}
-          <Pressable
-            onPress={submit}
-            onPressIn={press.onPressIn}
-            onPressOut={press.onPressOut}
-            disabled={busy}
-            accessibilityRole="button"
-            accessibilityLabel="就叫这个"
-            accessibilityState={{ disabled: busy, busy }}
-            style={styles.buttonHost}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <Animated.View entering={backdropIn} style={styles.backdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel="取消" />
+          <Animated.View
+            entering={sheetIn}
+            style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}
+            accessibilityViewIsModal
           >
-            <Animated.View style={[styles.button, busy && { opacity: 0.6 }, press.style]}>
-              {busy ? <ActivityIndicator color={colors.white} size="small" /> : null}
-              <AppText size={16} weight="700" color={colors.white}>就叫这个</AppText>
-            </Animated.View>
-          </Pressable>
+            <View style={styles.grab} />
+            <AppText size={21} weight="800" style={styles.title}>{title}</AppText>
+            <AppText size={13} color={colors.muted} style={styles.hint}>
+              其他人会在你的评论和菜谱上看到这个名字
+            </AppText>
+            <TextInput
+              value={value}
+              onChangeText={(text) => {
+                setValue(text);
+                if (error) setError(null);
+              }}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder="昵称"
+              placeholderTextColor={colors.placeholder}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={40}
+              selectTextOnFocus
+              returnKeyType="done"
+              onSubmitEditing={submit}
+              accessibilityLabel="社区昵称"
+              style={[
+                styles.input,
+                IS_ANDROID
+                  ? { borderBottomColor: error ? colors.danger : focused ? colors.accent : colors.placeholder }
+                  : {
+                      borderColor: error ? colors.danger : focused ? colors.ink : "transparent",
+                      backgroundColor: focused ? colors.surface : colors.surfaceAlt,
+                    },
+              ]}
+            />
+            {error ? (
+              <Animated.View entering={FadeIn.duration(motion.duration.fast)}>
+                <AppText size={13} color={colors.danger} style={styles.errorText}>{error}</AppText>
+              </Animated.View>
+            ) : null}
+            <Pressable
+              onPress={submit}
+              onPressIn={press.onPressIn}
+              onPressOut={press.onPressOut}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel="就叫这个"
+              accessibilityState={{ disabled: busy, busy }}
+              style={styles.buttonHost}
+            >
+              <Animated.View style={[styles.button, busy && { opacity: 0.6 }, press.style]}>
+                {busy ? <ActivityIndicator color={colors.white} size="small" /> : null}
+                <AppText size={16} weight="700" color={colors.white}>就叫这个</AppText>
+              </Animated.View>
+            </Pressable>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFill,
+    flex: 1,
     backgroundColor: "rgba(23,31,46,0.4)",
     justifyContent: "flex-end",
   },

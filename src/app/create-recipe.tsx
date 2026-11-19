@@ -5,10 +5,7 @@ import {
   ActivityIndicator,
   BackHandler,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -25,6 +22,7 @@ import Animated, {
 } from "react-native-reanimated";
 import type { LayoutAnimation } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 
 import { AppText } from "../components/Common";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -174,7 +172,7 @@ export default function CreateRecipeScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   // 上移/下移之后要把焦点带回刚动过的那一步，用户连按两次不用重新点输入框。
   const stepInputs = useRef<Record<string, React.ComponentRef<typeof TextInput> | null>>({});
-  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const [touched, setTouched] = useState(false);
   const [pane, setPane] = useState<Pane>("import");
   const [importBusy, setImportBusy] = useState(false);
@@ -515,7 +513,7 @@ export default function CreateRecipeScreen() {
   const bannerError = error && !nameError ? error : null;
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <View style={styles.screen}>
       <View style={[styles.topbar, { paddingTop: insets.top + 6 }]}>
         <PressScale
           onPress={leave}
@@ -561,8 +559,9 @@ export default function CreateRecipeScreen() {
         </Animated.View>
       ) : null}
 
-      <ScrollView
+      <KeyboardAwareScrollView
         ref={scrollRef}
+        bottomOffset={spacing.xl}
         contentContainerStyle={{ paddingBottom: insets.bottom + 60 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -781,7 +780,7 @@ export default function CreateRecipeScreen() {
             </PressScale>
           ) : null}
         </Animated.View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Toast toast={toast} bottom={insets.bottom + 24} onUndo={undo} />
       {confirmLeave ? (
@@ -818,7 +817,7 @@ export default function CreateRecipeScreen() {
           }}
         />
       ) : null}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

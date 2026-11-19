@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -15,6 +14,7 @@ import {
 import Animated, { Easing, FadeIn, FadeOut, SlideInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
 import { AppText, usePressScale } from "../Common";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -528,7 +528,7 @@ function Composer({
 
   return (
     <Modal transparent animationType="none" visible onRequestClose={close}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={IS_ANDROID ? "height" : "padding"}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Animated.View entering={backdropIn} style={styles.backdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="收起评论框" />
           {error ? (

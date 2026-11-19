@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { colors } from "../theme";
@@ -47,32 +48,34 @@ export default function RootLayout() {
   useCookNotificationRoutes();
   return (
     <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <StoreProvider>
-          <CommunityProfileProvider>
-            <StatusBar style="dark" />
-            <GuestMergePrompt />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.canvas },
-                animation: "slide_from_right",
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
-              <Stack.Screen name="recipe/[id]" />
-              <Stack.Screen
-                name="cook/[id]"
-                options={{ presentation: "fullScreenModal", animation: "slide_from_bottom", gestureEnabled: false }}
-              />
-              <Stack.Screen name="shopping-list" options={{ presentation: "modal" }} />
-              <Stack.Screen name="sign-in" options={{ presentation: "modal" }} />
-              <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
-              <Stack.Screen name="account" />
-            </Stack>
-          </CommunityProfileProvider>
-        </StoreProvider>
-      </SafeAreaProvider>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <StoreProvider>
+            <CommunityProfileProvider>
+              <StatusBar style="dark" />
+              <GuestMergePrompt />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.canvas },
+                  animation: "slide_from_right",
+                }}
+              >
+                <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
+                <Stack.Screen name="recipe/[id]" />
+                <Stack.Screen
+                  name="cook/[id]"
+                  options={{ presentation: "fullScreenModal", animation: "slide_from_bottom", gestureEnabled: false }}
+                />
+                <Stack.Screen name="shopping-list" options={{ presentation: "modal" }} />
+                <Stack.Screen name="sign-in" options={{ presentation: "modal" }} />
+                <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
+                <Stack.Screen name="account" />
+              </Stack>
+            </CommunityProfileProvider>
+          </StoreProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

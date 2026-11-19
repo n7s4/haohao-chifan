@@ -12,11 +12,11 @@ import {
   Platform,
   Pressable,
   Share,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -629,7 +629,8 @@ export default function ShoppingListScreen() {
         </Pressable>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
+        bottomOffset={spacing.xl}
         contentContainerStyle={{ paddingBottom: footerH + spacing.xxl }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -833,7 +834,7 @@ export default function ShoppingListScreen() {
             ) : null}
           </View>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* 底栏 */}
       <View

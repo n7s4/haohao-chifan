@@ -3,10 +3,8 @@ import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   TextInputProps,
@@ -28,6 +26,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Rect } from "react-native-svg";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 import { AppText, Card, usePressScale } from "../components/Common";
 import { FoodArt } from "../components/FoodArt";
@@ -125,11 +124,9 @@ export default function SignInScreen() {
   const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.get() }] }));
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
+    <View style={styles.screen}>
+      <KeyboardAwareScrollView
+        bottomOffset={spacing.xl}
         contentContainerStyle={{
           paddingTop: insets.top + spacing.sm,
           paddingBottom: insets.bottom + spacing.xxl,
@@ -290,8 +287,8 @@ export default function SignInScreen() {
             <AppText size={14} weight="600" color={colors.muted}>先随便看看</AppText>
           </Pressable>
         ) : null}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
+    </View>
   );
 }
 

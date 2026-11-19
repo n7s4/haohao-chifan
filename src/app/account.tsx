@@ -28,6 +28,7 @@ import Animated, {
   ZoomIn,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import { AppText } from "../components/Common";
@@ -438,70 +439,72 @@ function PasswordSheet({ onClose, onDone }: { onClose: () => void; onDone: () =>
 
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <View style={styles.sheetBackdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="关闭" />
-        <Animated.View entering={sheetIn} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
-          <View style={styles.grab} />
-          <View style={styles.sheetHeader}>
-            <AppText size={21} weight="800" style={styles.sheetTitle}>修改密码</AppText>
-            <PressScale
-              onPress={onClose}
-              to={0.88}
-              hitSlop={6}
-              style={styles.closeBtn}
-              accessibilityRole="button"
-              accessibilityLabel="关闭"
-            >
-              <CloseIcon color={colors.ink} />
-            </PressScale>
-          </View>
-          <Animated.View style={shakeStyle}>
-            <PasswordField
-              label="新密码"
-              value={password}
-              onChange={setPassword}
-              visible={visible}
-              toggle={() => setVisible((current) => !current)}
-              placeholder="至少 6 位"
-              ok={longEnough}
-            />
-            <PasswordField
-              label="确认新密码"
-              value={confirm}
-              onChange={setConfirm}
-              visible={visible}
-              toggle={() => setVisible((current) => !current)}
-              placeholder="再输一次"
-              ok={matches && longEnough}
-              bad={mismatch}
-            />
-          </Animated.View>
-          {mismatch ? (
-            <AppText size={13} color={colors.danger} style={styles.hint}>两次输入的不一样</AppText>
-          ) : null}
-          {error ? (
-            <Animated.View entering={FadeIn.duration(motion.duration.fast)}>
-              <AppText size={13} color={colors.danger} style={styles.hint}>{error}</AppText>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <View style={[styles.sheetBackdrop, styles.sheetBackdropFlex]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="关闭" />
+          <Animated.View entering={sheetIn} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.grab} />
+            <View style={styles.sheetHeader}>
+              <AppText size={21} weight="800" style={styles.sheetTitle}>修改密码</AppText>
+              <PressScale
+                onPress={onClose}
+                to={0.88}
+                hitSlop={6}
+                style={styles.closeBtn}
+                accessibilityRole="button"
+                accessibilityLabel="关闭"
+              >
+                <CloseIcon color={colors.ink} />
+              </PressScale>
+            </View>
+            <Animated.View style={shakeStyle}>
+              <PasswordField
+                label="新密码"
+                value={password}
+                onChange={setPassword}
+                visible={visible}
+                toggle={() => setVisible((current) => !current)}
+                placeholder="至少 6 位"
+                ok={longEnough}
+              />
+              <PasswordField
+                label="确认新密码"
+                value={confirm}
+                onChange={setConfirm}
+                visible={visible}
+                toggle={() => setVisible((current) => !current)}
+                placeholder="再输一次"
+                ok={matches && longEnough}
+                bad={mismatch}
+              />
             </Animated.View>
-          ) : null}
-          <AppText size={13} color={colors.muted} style={styles.hint}>
-            其他设备需要重新登录
-          </AppText>
-          <PressScale
-            onPress={save}
-            disabled={!ready}
-            style={[styles.btn, styles.btnPrimary, !ready && { opacity: 0.4 }, { marginTop: spacing.lg }]}
-            accessibilityRole="button"
-            accessibilityLabel="保存新密码"
-            accessibilityState={{ disabled: !ready, busy }}
-          >
-            {busy ? <ActivityIndicator color={colors.white} size="small" /> : null}
-            <AppText size={16} weight="700" color={colors.white}>
-              {busy ? "保存中…" : "保存"}
+            {mismatch ? (
+              <AppText size={13} color={colors.danger} style={styles.hint}>两次输入的不一样</AppText>
+            ) : null}
+            {error ? (
+              <Animated.View entering={FadeIn.duration(motion.duration.fast)}>
+                <AppText size={13} color={colors.danger} style={styles.hint}>{error}</AppText>
+              </Animated.View>
+            ) : null}
+            <AppText size={13} color={colors.muted} style={styles.hint}>
+              其他设备需要重新登录
             </AppText>
-          </PressScale>
-        </Animated.View>
-      </View>
+            <PressScale
+              onPress={save}
+              disabled={!ready}
+              style={[styles.btn, styles.btnPrimary, !ready && { opacity: 0.4 }, { marginTop: spacing.lg }]}
+              accessibilityRole="button"
+              accessibilityLabel="保存新密码"
+              accessibilityState={{ disabled: !ready, busy }}
+            >
+              {busy ? <ActivityIndicator color={colors.white} size="small" /> : null}
+              <AppText size={16} weight="700" color={colors.white}>
+                {busy ? "保存中…" : "保存"}
+              </AppText>
+            </PressScale>
+          </Animated.View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -708,6 +711,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(23,31,46,0.4)",
     justifyContent: "flex-end",
   },
+  // 键盘弹出时外层让出底部空间，这里改成撑满而不是绝对定位，背板才会跟着上移。
+  sheetBackdropFlex: { position: "relative", flex: 1 },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 28,
