@@ -138,7 +138,12 @@ export default function CommunityRecipeScreen() {
       setPage({ status: "ready", cr: r.value });
       setLikeCount(r.value.likeCount);
       const authorId = r.value.authorId;
-      if (r.value.builtin || !authorId) return;
+      // 内置菜 / 作者 id 缺失：没有资料可读，直接落到兜底昵称，存菜按钮不会一直禁用。
+      if (r.value.builtin || !authorId) {
+        setAuthor(null);
+        return;
+      }
+      setAuthor(undefined);
       // 作者资料取不到只影响头像昵称的显示，不当作菜不可用。
       settle(getProfiles(client, [authorId])).then((p) => {
         if (!cancelled) setAuthor(p.ok ? p.value.get(authorId) ?? null : null);
@@ -166,6 +171,7 @@ export default function CommunityRecipeScreen() {
 
   const retry = () => {
     setPage({ status: "loading" });
+    setAuthor(undefined);
     setAttempt((n) => n + 1);
   };
 
@@ -190,7 +196,7 @@ export default function CommunityRecipeScreen() {
   }
 
   const isBuiltin = cr.builtin;
-  const authorLoading = !isBuiltin && author === undefined;
+  const authorLoading = !isBuiltin && !!cr.authorId && author === undefined;
   const authorName = isBuiltin ? BRAND_NAME : author === undefined ? "" : author?.nickname || FALLBACK_NICKNAME;
   const favId = favoriteIdFor(cr, userId);
   const isFavorite = favorites.includes(favId);
