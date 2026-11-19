@@ -91,8 +91,8 @@ export default function DiscoverScreen() {
   const { toast, show, undo } = useToast();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState(0);
-  const [mode, setMode] = useState<"recipes" | "community">("recipes");
-  const [communityOpened, setCommunityOpened] = useState(false);
+  const [mode, setMode] = useState<"recipes" | "community">("community");
+  const [communityOpened, setCommunityOpened] = useState(true);
   const [session, setSession] = useState<CookSession | null>(null);
   const [coverFailed, setCoverFailed] = useState<Record<string, boolean>>({});
 
