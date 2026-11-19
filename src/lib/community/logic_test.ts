@@ -134,7 +134,7 @@ Deno.test("fromSnapshot", () => {
   assertEquals(out.copies[0], { from: "cid/c1.jpg", to: "u2/new1/c1.jpg" });
 });
 
-Deno.test("fromSnapshot: 完整复制可选字段；没 path 的图不进复制清单", () => {
+Deno.test("fromSnapshot: 完整复制可选字段；没 path 的图丢掉、不进复制清单", () => {
   const cr = {
     id: "cid", authorId: "u1", sourceRecipeId: "r1", builtin: false, status: "published" as const,
     likeCount: 0, commentCount: 0, publishedAt: null,
@@ -143,7 +143,11 @@ Deno.test("fromSnapshot: 完整复制可选字段；没 path 的图不进复制�
       tags: ["肉"], art: "rice" as const, heat: "小火", tips: ["慢炖"], stepMinutes: [5, 55],
       cover: { id: "c1", width: 4, height: 3 },
       ingredients: [{ name: "五花肉", qty: 500, unit: "g" }],
-      steps: [{ text: "焯水", images: [{ id: "i1", path: "cid/i1.jpg" }, { id: "i2" }] }, { text: "炖" }],
+      steps: [
+        { text: "焯水", images: [{ id: "i1", path: "cid/i1.jpg" }, { id: "i2" }] },
+        { text: "炖" },
+        { text: "收汁", images: [{ id: "i3" }] },
+      ],
     },
   };
   const out = fromSnapshot(cr, "u2", "new1", "小李");
@@ -152,8 +156,9 @@ Deno.test("fromSnapshot: 完整复制可选字段；没 path 的图不进复制�
   assertEquals(out.input.tips, ["慢炖"]);
   assertEquals(out.input.stepMinutes, [5, 55]);
   assertEquals(out.input.subtitle, "");
-  assertEquals(out.input.cover, { id: "c1", width: 4, height: 3 });
-  assertEquals(out.input.steps[0].images, [{ id: "i1", path: "u2/new1/i1.jpg" }, { id: "i2" }]);
+  assertEquals(out.input.cover, null); // 封面没 path → 丢掉
+  assertEquals(out.input.steps[0].images, [{ id: "i1", path: "u2/new1/i1.jpg" }]); // i2 没 path → 丢掉
+  assert(!("images" in out.input.steps[2]), "全是没 path 的图 → 不留空 images");
   assertEquals(out.copies, [{ from: "cid/i1.jpg", to: "u2/new1/i1.jpg" }]);
   assertEquals(cr.recipe.steps[0].images?.[0].path, "cid/i1.jpg"); // 不改入参
 });
@@ -205,8 +210,7 @@ Deno.test("applyLikeToggle", () => {
 
 Deno.test("communityIdFor: 稳定、uuid 形状、不依赖 crypto.randomUUID", () => {
   const original = globalThis.crypto.randomUUID;
-  // deno-lint-ignore no-explicit-any
-  (globalThis.crypto as any).randomUUID = undefined;
+  (globalThis.crypto as unknown as { randomUUID: unknown }).randomUUID = undefined;
   try {
     const a = communityIdFor("u1", "r1");
     assertEquals(a, communityIdFor("u1", "r1"));

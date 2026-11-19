@@ -16,13 +16,14 @@ export type SaveToMineResult =
  * 图先从公开桶复制到私有桶，全部成功才建菜；复制出来的图带 path，不会再被当成待上传。
  */
 export function useSaveToMine(): (cr: CommunityRecipe, authorNickname: string) => Promise<SaveToMineResult> {
-  const { customRecipes, createRecipe } = useStore();
+  const { getCustomRecipes, createRecipe } = useStore();
   // 同一道菜连点两下只跑一次。
   const inflight = useRef(new Map<string, Promise<SaveToMineResult>>());
 
   return useCallback(
     (cr, authorNickname) => {
-      const saved = customRecipes.find((r) => r.origin?.communityId === cr.id);
+      // 读 ref 里最新的列表：刚建完、还没重渲染时再点一次也能查到。
+      const saved = getCustomRecipes().find((r) => r.origin?.communityId === cr.id);
       if (saved) return Promise.resolve({ ok: true, recipeId: saved.id, existed: true });
       const pending = inflight.current.get(cr.id);
       if (pending) return pending;
@@ -45,11 +46,14 @@ export function useSaveToMine(): (cr: CommunityRecipe, authorNickname: string) =
       };
 
       const p = run()
-        .catch((): SaveToMineResult => ({ ok: false, reason: "network" }))
+        .catch((error): SaveToMineResult => {
+          console.warn("saveToMine failed", error);
+          return { ok: false, reason: "network" };
+        })
         .finally(() => inflight.current.delete(cr.id));
       inflight.current.set(cr.id, p);
       return p;
     },
-    [customRecipes, createRecipe]
+    [getCustomRecipes, createRecipe]
   );
 }

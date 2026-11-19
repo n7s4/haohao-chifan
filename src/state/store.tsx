@@ -196,6 +196,8 @@ type Store = {
   allRecipes: Recipe[];
   /** 自建菜（不含内置），新建/同步用。 */
   customRecipes: Recipe[];
+  /** 读最新的自建菜（不等重渲染）：异步流程里查重用它，闭包里的 customRecipes 可能是旧的。 */
+  getCustomRecipes: () => Recipe[];
   /** 按 id 找菜（内置 + 自建）。找不到返回 undefined。 */
   findRecipe: (id: string | null | undefined) => Recipe | undefined;
   /** 某个餐位上排的菜；优先走合并源，自建菜也能取到。 */
@@ -800,6 +802,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     },
     [allRecipes]
   );
+
+  const getCustomRecipes = useCallback(() => customRecipesRef.current, []);
 
   const pushRecipe = useCallback(
     (recipe: Recipe) =>
@@ -1798,6 +1802,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     rateRecipe,
     allRecipes,
     customRecipes,
+    getCustomRecipes,
     findRecipe,
     recipeFor,
     createRecipe,

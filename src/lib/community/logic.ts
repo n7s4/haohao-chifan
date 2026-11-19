@@ -174,14 +174,21 @@ export function fromSnapshot(
   const ingredients = cr.recipe.ingredients.filter((i) => i.section !== "seasoning").map(pick);
   const seasonings = cr.recipe.ingredients.filter((i) => i.section === "seasoning").map(pick);
   const { subtitle, description, tags, difficulty, calories, heat, tips, stepMinutes, art } = cr.recipe;
+  // 没 path 的图在公开桶里没有对应文件，复制过来只会是永久破图：直接丢掉。
+  const steps = r.steps.map((s) => {
+    if (!s.images) return s;
+    const { images, ...rest } = s;
+    const kept = images.filter((img) => img.path);
+    return kept.length ? { ...rest, images: kept } : rest;
+  });
   return {
     input: {
       name: cr.recipe.name,
       minutes: cr.recipe.minutes,
       ingredients,
       seasonings,
-      steps: r.steps,
-      cover: r.cover ?? null,
+      steps,
+      cover: r.cover?.path ? r.cover : null,
       subtitle,
       description,
       tags: [...tags],
