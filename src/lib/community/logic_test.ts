@@ -2,6 +2,10 @@ import { assert, assertEquals } from "jsr:@std/assert";
 import {
   applyLikeToggle,
   canSaveToMine,
+  COMMENT_MAX,
+  commentActions,
+  commentLength,
+  commentTime,
   likeAfterLookup,
   mergeFeedPage,
   type CommentRow,
@@ -13,6 +17,7 @@ import {
   missingUploads,
   parseCommunityFavoriteId,
   planPool,
+  replyParentId,
   threadComments,
   toSnapshot,
   validateCommentBody,
@@ -250,4 +255,45 @@ Deno.test("canSaveToMine：内置菜和自己发布的菜不显示，别人的�
 Deno.test("likeAfterLookup：本地不知道赞没赞时，查到已赞只同步显示，查到没赞才发点赞", () => {
   assertEquals(likeAfterLookup(true), "sync");
   assertEquals(likeAfterLookup(false), "toggle");
+});
+
+
+Deno.test("replyParentId：回复只挂一层，回复的回复挂到顶层", () => {
+  const top: CommentRow = { id: "a", parentId: null, userId: "u1", body: "x", deleted: false, createdAt: "1" };
+  const reply: CommentRow = { id: "b", parentId: "a", userId: "u2", body: "y", deleted: false, createdAt: "2" };
+  assertEquals(replyParentId(top), "a");
+  assertEquals(replyParentId(reply), "a");
+});
+
+Deno.test("commentActions：本人或菜的作者可删，别人的评论可举报", () => {
+  const c: CommentRow = { id: "a", parentId: null, userId: "u1", body: "x", deleted: false, createdAt: "1" };
+  assertEquals(commentActions(c, "u1", "author"), ["delete"]);
+  assertEquals(commentActions(c, "author", "author"), ["delete", "report"]);
+  assertEquals(commentActions(c, "u2", "author"), ["report"]);
+  assertEquals(commentActions(c, null, "author"), ["report"]);
+  // 内置菜没有作者：只有本人能删
+  assertEquals(commentActions(c, "u2", null), ["report"]);
+  assertEquals(commentActions({ ...c, userId: "author" }, "author", "author"), ["delete"]);
+  // 已删除（显示「该评论已删除」）的不弹操作
+  assertEquals(commentActions({ ...c, deleted: true }, "u1", "author"), []);
+});
+
+Deno.test("commentLength：trim 后按码点计", () => {
+  assertEquals(commentLength("  好吃😋  "), 3);
+  assertEquals(commentLength("   "), 0);
+  assertEquals(COMMENT_MAX, 500);
+});
+
+Deno.test("commentTime：相对时间", () => {
+  const now = new Date(2026, 10, 19, 12, 0, 0);
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  assertEquals(commentTime(ago(20 * 1000), now), "刚刚");
+  assertEquals(commentTime(ago(5 * 60 * 1000), now), "5 分钟前");
+  assertEquals(commentTime(ago(3 * 3600 * 1000), now), "3 小时前");
+  assertEquals(commentTime(ago(2 * 86400 * 1000), now), "2 天前");
+  assertEquals(commentTime(new Date(2026, 0, 5, 9).toISOString(), now), "1月5日");
+  assertEquals(commentTime(new Date(2025, 11, 30, 9).toISOString(), now), "2025年12月30日");
+  // 时钟偏差导致的「未来时间」也算刚刚；解析不了的给空串
+  assertEquals(commentTime(new Date(now.getTime() + 60000).toISOString(), now), "刚刚");
+  assertEquals(commentTime("bad", now), "");
 });

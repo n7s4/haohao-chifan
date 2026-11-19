@@ -252,6 +252,50 @@ export function threadComments(rows: CommentRow[]): { comment: CommentRow; repli
     .sort((a, b) => -byTime(a.comment, b.comment));
 }
 
+/** 回复只有一层：回复别人的回复时，挂到那条回复所在的顶层评论下。 */
+export function replyParentId(c: CommentRow): string {
+  return c.parentId ?? c.id;
+}
+
+/**
+ * 长按评论能做什么：本人或菜的作者可「删除」，别人的评论可「举报」（游客也显示，点了去登录）。
+ * 已删除的评论（「该评论已删除」占位）没有操作。内置菜 authorId 为 null，只有评论者本人能删。
+ */
+export function commentActions(
+  c: CommentRow,
+  viewerId: string | null,
+  recipeAuthorId: string | null,
+): ("delete" | "report")[] {
+  if (c.deleted) return [];
+  const own = viewerId !== null && c.userId === viewerId;
+  const isAuthor = viewerId !== null && recipeAuthorId !== null && viewerId === recipeAuthorId;
+  const out: ("delete" | "report")[] = [];
+  if (own || isAuthor) out.push("delete");
+  if (!own) out.push("report");
+  return out;
+}
+
+export const COMMENT_MAX = 500;
+
+/** 与 validateCommentBody 同一口径：trim 后按 Unicode 码点计。 */
+export function commentLength(s: string): number {
+  return len(s.trim());
+}
+
+/** 评论时间：刚刚 / N 分钟前 / N 小时前 / N 天前（7 天内）/ M月D日（今年）/ YYYY年M月D日。 */
+export function commentTime(iso: string, now: Date): string {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "";
+  const diff = now.getTime() - t.getTime();
+  const minute = 60 * 1000;
+  if (diff < minute) return "刚刚";
+  if (diff < 60 * minute) return `${Math.floor(diff / minute)} 分钟前`;
+  if (diff < 24 * 60 * minute) return `${Math.floor(diff / (60 * minute))} 小时前`;
+  if (diff < 7 * 24 * 60 * minute) return `${Math.floor(diff / (24 * 60 * minute))} 天前`;
+  const md = `${t.getMonth() + 1}月${t.getDate()}日`;
+  return t.getFullYear() === now.getFullYear() ? md : `${t.getFullYear()}年${md}`;
+}
+
 /** 社区列表翻页：追加并按 id 去重；本页不足 pageSize 条说明到底了。 */
 export function mergeFeedPage<T extends { id: string }>(
   prev: T[],

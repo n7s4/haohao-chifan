@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 
 import { AppText, usePressScale } from "../../components/Common";
+import { Comments, type CommentsHandle } from "../../components/community/Comments";
 import { ActionSheet, ReportSheet } from "../../components/community/ReportSheet";
 import { FoodArt } from "../../components/FoodArt";
 import { BackIcon, HeartIcon } from "../../components/Icons";
@@ -92,6 +93,7 @@ export default function CommunityRecipeScreen() {
   // undefined = 还在读；null = 读失败或没有公开资料（显示兜底昵称）。
   const [author, setAuthor] = useState<PublicProfile | null | undefined>(undefined);
   const [likeCount, setLikeCount] = useState(0);
+  const [commentCount, setCommentCount] = useState(0);
   // 「我赞没赞」带着所属账号：换账号 / 登出后自然失效，不用在 effect 里同步清。
   const [likedFor, setLikedFor] = useState<{ userId: string; liked: boolean } | null>(null);
   const [liking, setLiking] = useState(false);
@@ -105,8 +107,9 @@ export default function CommunityRecipeScreen() {
   const likeBusy = useRef(false);
   const saveBusy = useRef(false);
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
-  /** 评论区（Task 9 填充）：「评论」按钮滚到这里。 */
+  /** 评论区：「评论」按钮滚到这里，并打开评论框。 */
   const commentsRef = useRef<React.ComponentRef<typeof View>>(null);
+  const commentsHandle = useRef<CommentsHandle>(null);
   const commentsY = useRef(0);
 
   // 路由没带 id：没有可读的菜，直接显示已下架，不会一直转圈。
@@ -137,6 +140,7 @@ export default function CommunityRecipeScreen() {
       }
       setPage({ status: "ready", cr: r.value });
       setLikeCount(r.value.likeCount);
+      setCommentCount(r.value.commentCount);
       const authorId = r.value.authorId;
       // 内置菜 / 作者 id 缺失：没有资料可读，直接落到兜底昵称，存菜按钮不会一直禁用。
       if (r.value.builtin || !authorId) {
@@ -284,6 +288,7 @@ export default function CommunityRecipeScreen() {
 
   const onComments = () => {
     scrollRef.current?.scrollTo({ y: Math.max(0, commentsY.current - insets.top - 64), animated: true });
+    commentsHandle.current?.focus();
   };
 
   const onReportMenu = () => {
@@ -371,7 +376,6 @@ export default function CommunityRecipeScreen() {
           />
         </View>
 
-        {/* 评论区占位：Task 9 在这里接入 <Comments />。 */}
         <View
           ref={commentsRef}
           style={styles.comments}
@@ -379,9 +383,17 @@ export default function CommunityRecipeScreen() {
             commentsY.current = event.nativeEvent.layout.y;
           }}
         >
-          <AppText size={20} weight="800" style={{ letterSpacing: -0.3 }}>
-            {cr.commentCount > 0 ? `评论 ${cr.commentCount}` : "评论"}
-          </AppText>
+          <Comments
+            ref={commentsHandle}
+            communityRecipeId={cr.id}
+            recipeAuthorId={cr.builtin ? null : cr.authorId}
+            currentUserId={userId}
+            commentCount={commentCount}
+            requireLogin={requireLogin}
+            onUnavailable={markUnavailable}
+            onCountChange={(delta) => setCommentCount((n) => Math.max(0, n + delta))}
+            toast={showText}
+          />
         </View>
       </ScrollView>
 
@@ -420,10 +432,10 @@ export default function CommunityRecipeScreen() {
               收藏
             </AppText>
           </BarButton>
-          <BarButton label={`评论，共 ${cr.commentCount} 条`} onPress={onComments}>
+          <BarButton label={`评论，共 ${commentCount} 条`} onPress={onComments}>
             <BubbleIcon size={22} color={colors.ink} />
             <AppText size={12} weight="700" color={colors.muted} style={styles.num}>
-              {cr.commentCount}
+              {commentCount}
             </AppText>
           </BarButton>
           {showSave ? <SaveButton saving={saving} disabled={authorLoading} onPress={onSave} /> : null}
