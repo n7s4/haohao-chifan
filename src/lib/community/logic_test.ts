@@ -1,6 +1,7 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 import {
   applyLikeToggle,
+  canSaveToMine,
   mergeFeedPage,
   type CommentRow,
   communityFavoriteId,
@@ -234,4 +235,13 @@ Deno.test("mergeFeedPage: 返回不足一页即没有更多", () => {
   const r = mergeFeedPage([], [{ id: "1" } as never], 20);
   assertEquals(r.items.length, 1);
   assertEquals(r.hasMore, false);
+});
+
+Deno.test("canSaveToMine：内置菜和自己发布的菜不显示，别人的菜（含未登录）显示", () => {
+  const cr = { authorId: "u1", builtin: false };
+  assertEquals(canSaveToMine(cr, "u2"), true);
+  assertEquals(canSaveToMine(cr, null), true);
+  assertEquals(canSaveToMine(cr, "u1"), false);
+  assertEquals(canSaveToMine({ authorId: null, builtin: true }, "u2"), false);
+  assertEquals(canSaveToMine({ authorId: null, builtin: true }, null), false);
 });

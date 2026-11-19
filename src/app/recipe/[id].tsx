@@ -1,11 +1,10 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, {
   Easing,
-  FadeInDown,
   interpolate,
   interpolateColor,
   runOnJS,
@@ -32,20 +31,14 @@ import {
   ClockIcon,
   FlameIcon,
   HeartIcon,
-  PlusIcon,
   StarIcon,
 } from "../../components/Icons";
 import { ART_TINTS } from "../../components/RecipeTile";
 import { Toast, useToast } from "../../components/Toast";
-import {
-  type ArtKind,
-  type Recipe,
-  cookingIngredients,
-  recipeSubtitle,
-  seasoningIngredients,
-} from "../../data/recipes";
+import { type ArtKind, type Recipe, recipeSubtitle } from "../../data/recipes";
 import { useStore } from "../../state/store";
 import { ImageViewer, type ViewerImage } from "../../components/ImageViewer";
+import { RecipeBody, rise } from "../../components/recipe/RecipeBody";
 import { useMediaUris } from "../../lib/useMedia";
 import { colors, motion, radius, shadow, spacing } from "../../theme";
 
@@ -53,12 +46,6 @@ const IS_ANDROID = Platform.OS === "android";
 const ICON_BTN = IS_ANDROID ? 48 : 44;
 const BTN_RADIUS = IS_ANDROID ? radius.pill : 16;
 const FLYER = 64;
-
-/** 分段入场：每块晚 60ms 从下方浮上来（设计稿 .rise）。 */
-const rise = (i: number) =>
-  FadeInDown.delay(60 + i * 60).duration(motion.duration.slow).easing(Easing.out(Easing.cubic));
-
-const formatQty = (n: number) => `${Number(n.toFixed(n < 1 ? 2 : 1))}`;
 
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -104,9 +91,6 @@ export default function RecipeDetailScreen() {
     ...(recipe?.steps.flatMap((step) => step.images ?? []) ?? []),
   ]);
   const coverUri = recipe?.cover ? recipe.cover.localUri ?? mediaUris[recipe.cover.id] : undefined;
-  // 步骤图按像素算尺寸：`width: "47%"` + aspectRatio 在安卓（Yoga，换行 row）里高度算成 0，
-  // 占了位却看不见（2026-11 真机 onLayout 实测 147×0）。
-  const [photoRowWidth, setPhotoRowWidth] = useState(0);
   /** 大图查看：封面 + 各步骤图排成一组，左右滑着看。 */
   const gallery: ViewerImage[] = [];
   if (recipe && coverUri) gallery.push({ key: recipe.cover?.id ?? "cover", uri: coverUri, caption: recipe.name });
@@ -121,20 +105,6 @@ export default function RecipeDetailScreen() {
     const at = gallery.findIndex((item) => item.key === key);
     if (at >= 0) setViewerIndex(at);
   };
-  const stepPhotoWidth = photoRowWidth > 0 ? Math.floor((photoRowWidth - spacing.sm) / 2) : 0;
-  const stepPhotoSize = stepPhotoWidth
-    ? { width: stepPhotoWidth, height: Math.round((stepPhotoWidth * 3) / 4) }
-    : { width: "47%" as const, height: 110 };
-  const factor = servings / 1;
-  const seasonings = useMemo(() => (recipe ? seasoningIngredients(recipe) : []), [recipe]);
-  const ingredients = useMemo(
-    () =>
-      (recipe ? cookingIngredients(recipe) : []).map((item) => ({
-        ...item,
-        display: item.qty === null ? item.unit : `${formatQty(item.qty * factor)} ${item.unit}`,
-      })),
-    [recipe, factor]
-  );
 
   if (!recipe) {
     return (
@@ -149,9 +119,6 @@ export default function RecipeDetailScreen() {
 
   const isFavorite = favorites.includes(recipe.id);
   const tint = recipe.art === "salad" ? colors.leafSoft : ART_TINTS[Math.abs(recipe.name.length) % ART_TINTS.length];
-  const stepMinutes = recipe.stepMinutes ?? [];
-  const totalStepMinutes = recipe.steps.reduce((sum, _, index) => sum + (stepMinutes[index] ?? 0), 0);
-  const tip = recipe.tips?.[0];
 
   const land = (label: string, message: string, undo?: () => void) => {
     setFlight(null);
@@ -249,142 +216,18 @@ export default function RecipeDetailScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={rise(3)}>
-            <View style={styles.blockHead}>
-              <AppText size={20} weight="800" style={{ letterSpacing: -0.3 }}>食材</AppText>
-              <View style={styles.stepper} accessibilityLabel="份量">
-                <StepperButton
-                  label="减少份量"
-                  disabled={servings <= 1}
-                  onPress={() => adjustServings(-1)}
-                >
-                  <MinusIcon size={18} color={colors.ink} />
-                </StepperButton>
-                <AppText size={17} weight="800" style={styles.stepperValue}>
-                  {servings} 人
-                </AppText>
-                <StepperButton
-                  label="增加份量"
-                  disabled={servings >= 6}
-                  onPress={() => adjustServings(1)}
-                >
-                  <PlusIcon size={18} color={colors.ink} />
-                </StepperButton>
-              </View>
-            </View>
-
-            {ingredients.length ? (
-              <View style={styles.card}>
-                {ingredients.map((item, index) => (
-                  <IngredientRow
-                    key={`${item.name}-${index}`}
-                    name={item.name}
-                    display={item.display}
-                    checked={Boolean(done[index])}
-                    last={index === ingredients.length - 1}
-                    onToggle={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setDone((current) => ({ ...current, [index]: !current[index] }));
-                    }}
-                  />
-                ))}
-              </View>
-            ) : null}
-
-            {seasonings.length ? (
-              <>
-                <AppText size={15} weight="800" style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
-                  调料
-                </AppText>
-                <View style={styles.card}>
-                  {seasonings.map((item, index) => (
-                    <View
-                      key={`${item.name}-${index}`}
-                      style={[styles.seasonRow, index === seasonings.length - 1 && { borderBottomWidth: 0 }]}
-                    >
-                      <View style={styles.seasonDot} />
-                      <AppText size={15} weight="500" style={{ flex: 1 }}>
-                        {item.name}
-                      </AppText>
-                      <Qty
-                        text={item.qty === null ? item.unit : `${formatQty(item.qty * factor)} ${item.unit}`}
-                        muted
-                      />
-                    </View>
-                  ))}
-                </View>
-              </>
-            ) : null}
-          </Animated.View>
-
-          <Animated.View entering={rise(4)}>
-            <View style={styles.blockHead}>
-              <AppText size={20} weight="800" style={{ letterSpacing: -0.3 }}>步骤</AppText>
-              <AppText size={13} color={colors.muted}>
-                {recipe.steps.length} 步{totalStepMinutes > 0 ? ` · 约 ${totalStepMinutes} 分钟` : ""}
-              </AppText>
-            </View>
-            {recipe.steps.map((step, index) => (
-              <View key={index} style={styles.stepRow}>
-                <View style={styles.stepRail}>
-                  <View style={styles.stepIndex}>
-                    <AppText size={15} weight="800" color={colors.sunText}>
-                      {index + 1}
-                    </AppText>
-                  </View>
-                  {index < recipe.steps.length - 1 ? <View style={styles.stepLine} /> : null}
-                </View>
-                <View style={{ flex: 1, paddingBottom: 18 }}>
-                  <AppText size={15.5} style={{ lineHeight: 25 }} color={colors.ink}>
-                    {step.text}
-                  </AppText>
-                  {stepMinutes[index] ? (
-                    <View style={styles.stepMeta}>
-                      <ClockIcon size={14} color={colors.muted} />
-                      <AppText size={12.5} color={colors.muted}>
-                        约 {stepMinutes[index]} 分钟
-                      </AppText>
-                    </View>
-                  ) : null}
-                  {step.images?.length ? (
-                    <View
-                      style={styles.stepPhotos}
-                      onLayout={(event) => setPhotoRowWidth(event.nativeEvent.layout.width)}
-                    >
-                      {step.images.map((image) => {
-                        const uri = image.localUri ?? mediaUris[image.id];
-                        return uri ? (
-                          <Pressable
-                            key={image.id}
-                            onPress={() => openViewer(image.id)}
-                            accessibilityRole="imagebutton"
-                            accessibilityLabel="查看步骤大图"
-                            style={[styles.stepPhoto, stepPhotoSize]}
-                          >
-                            <Image
-                              alt="步骤配图"
-                              source={{ uri }}
-                              style={StyleSheet.absoluteFill}
-                              resizeMode="cover"
-                            />
-                          </Pressable>
-                        ) : null;
-                      })}
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-            {tip ? (
-              <View style={styles.tipBox}>
-                <AppText size={14} color={colors.leafText} style={{ lineHeight: 21 }}>
-                  <AppText size={14} weight="800" color={colors.leafText}>小提示</AppText>
-                  {"　"}
-                  {tip}
-                </AppText>
-              </View>
-            ) : null}
-          </Animated.View>
+          <RecipeBody
+            recipe={recipe}
+            imageUri={(image) => image.localUri ?? mediaUris[image.id] ?? null}
+            servings={servings}
+            onAdjustServings={adjustServings}
+            checked={done}
+            onToggleIngredient={(index) => {
+              Haptics.selectionAsync().catch(() => {});
+              setDone((current) => ({ ...current, [index]: !current[index] }));
+            }}
+            onPressImage={(image) => openViewer(image.id)}
+          />
         </View>
       </Animated.ScrollView>
 
@@ -718,35 +561,6 @@ function Squish({
   );
 }
 
-function StepperButton({
-  label,
-  disabled,
-  onPress,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      style={({ pressed }) => [
-        styles.stepperBtn,
-        pressed && { backgroundColor: colors.surface },
-        disabled && { opacity: 0.35 },
-      ]}
-    >
-      {children}
-    </Pressable>
-  );
-}
-
 function Stat({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
   return (
     <View style={styles.stat}>
@@ -758,83 +572,6 @@ function Stat({ icon, value, label }: { icon: React.ReactNode; value: string; la
         {label}
       </AppText>
     </View>
-  );
-}
-
-function IngredientRow({
-  name,
-  display,
-  checked,
-  last,
-  onToggle,
-}: {
-  name: string;
-  display: string;
-  checked: boolean;
-  last: boolean;
-  onToggle: () => void;
-}) {
-  const on = useSharedValue(checked ? 1 : 0);
-  useEffect(() => {
-    on.set(withSpring(checked ? 1 : 0, motion.spring));
-  }, [checked, on]);
-  const circle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(on.value, [0, 1], [colors.surface, colors.leaf]),
-    borderColor: interpolateColor(on.value, [0, 1], [colors.border, colors.leaf]),
-    transform: [{ scale: 1 + on.value * 0.08 }],
-  }));
-  const tick = useAnimatedStyle(() => ({
-    opacity: on.value,
-    transform: [{ scale: 0.4 + on.value * 0.6 }],
-  }));
-  return (
-    <Pressable
-      onPress={onToggle}
-      style={[styles.ingRow, last && { borderBottomWidth: 0 }]}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
-      accessibilityLabel={`${name} ${display}`}
-    >
-      <Animated.View style={[styles.check, circle]}>
-        <Animated.View style={tick}>
-          <CheckIcon size={14} color={colors.white} />
-        </Animated.View>
-      </Animated.View>
-      <AppText
-        size={15}
-        weight="500"
-        color={checked ? colors.placeholder : colors.ink}
-        style={[{ flex: 1 }, checked && { textDecorationLine: "line-through" }]}
-      >
-        {name}
-      </AppText>
-      <Qty text={display} muted={checked} />
-    </Pressable>
-  );
-}
-
-/** 份量一变，数字从上方弹下来（设计稿 .q.tick）；首帧不动。 */
-function Qty({ text, muted }: { text: string; muted?: boolean }) {
-  const t = useSharedValue(1);
-  const first = useRef(true);
-  useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
-    t.set(0);
-    t.set(withSpring(1, motion.spring));
-  }, [text, t]);
-  const style = useAnimatedStyle(() => ({
-    opacity: interpolate(t.value, [0, 0.6], [0, 1], "clamp"),
-    transform: [{ translateY: (1 - t.value) * -8 }],
-  }));
-  return (
-    <Animated.View style={style}>
-      <AppText size={15} weight="700" color={muted ? colors.placeholder : colors.ink} style={{ fontVariant: ["tabular-nums"] }}>
-        {text}
-      </AppText>
-    </Animated.View>
   );
 }
 
@@ -910,14 +647,6 @@ function Flyer({
 
 /* ---------------- 本页专用图标（Icons.tsx 里没有） ---------------- */
 
-function MinusIcon({ color = colors.ink, size = 16 }: { color?: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M5 12h14" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    </Svg>
-  );
-}
-
 function GaugeIcon({ color = colors.ink, size = 20 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -989,86 +718,8 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
 
-  blockHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: spacing.xxl,
-    marginBottom: spacing.md,
-  },
-  stepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: 14,
-    padding: 3,
-  },
-  stepperBtn: { width: 40, height: 40, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  stepperValue: { minWidth: 44, textAlign: "center", fontVariant: ["tabular-nums"] },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
-    ...shadow.card,
-  },
-  ingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    minHeight: 54,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  check: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  seasonRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    minHeight: 50,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  seasonDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.sun, marginHorizontal: 9 },
 
-  stepRow: { flexDirection: "row", gap: spacing.md },
-  stepRail: { width: 34, alignItems: "center" },
-  stepIndex: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: colors.sunSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // 单边虚线在 iOS 上画不出来，用 0 宽 + 四边虚线收成一条竖虚线。
-  stepLine: {
-    flex: 1,
-    width: 0,
-    marginTop: 6,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.border,
-  },
-  stepMeta: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  stepPhotos: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
-  stepPhoto: { borderRadius: radius.sm, overflow: "hidden", backgroundColor: colors.track },
-  tipBox: {
-    backgroundColor: colors.leafSoft,
-    borderRadius: radius.md,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.lg,
-    marginTop: 4,
-  },
 
   floatBar: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 20 },
   floatBarBg: {

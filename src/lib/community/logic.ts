@@ -63,6 +63,14 @@ export function favoriteIdFor(
   return communityFavoriteId(cr.id);
 }
 
+/** 详情页「存到我的菜谱」：内置菜和自己发布的菜不显示（自己的菜本来就在「我的菜谱」里）。 */
+export function canSaveToMine(
+  cr: Pick<CommunityRecipe, "authorId" | "builtin">,
+  currentUserId: string | null,
+): boolean {
+  return !cr.builtin && !(currentUserId !== null && cr.authorId === currentUserId);
+}
+
 /** 本周计划的候选池：社区菜收藏不进计划，过滤后为空则退回全部菜。 */
 export function planPool(favorites: string[], allRecipeIds: string[]): string[] {
   const pool = favorites.filter((id) => !id.startsWith(COMMUNITY_PREFIX));
