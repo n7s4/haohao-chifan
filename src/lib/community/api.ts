@@ -10,6 +10,7 @@ import type { Recipe } from "../../data/recipes";
 import { normalizeStepImage, normalizeSteps } from "../steps";
 import {
   type CommentRow,
+  communityIdFor,
   type CommunityRecipe,
   type ImageCopy,
   missingUploads,
@@ -157,15 +158,21 @@ export async function findMyPublication(
 
 // ------------------------------------------------------------------ 公开桶
 
-async function clearPublicFolder(client: SupabaseClient, folder: string): Promise<Result<number>> {
-  const bucket = client.storage.from(PUBLIC_BUCKET);
-  const { data, error } = await bucket.list(folder, { limit: 1000 });
+async function listPublicFolder(client: SupabaseClient, folder: string): Promise<Result<string[]>> {
+  const { data, error } = await client.storage.from(PUBLIC_BUCKET).list(folder, { limit: 1000 });
   if (error) return fail(reasonOf(error));
-  const paths = (data ?? []).map((f) => `${folder}/${f.name}`);
-  if (!paths.length) return ok(0);
-  const removed = await bucket.remove(paths);
-  if (removed.error) return fail(reasonOf(removed.error));
-  return ok(paths.length);
+  return ok((data ?? []).map((f) => `${folder}/${f.name}`));
+}
+
+async function removePublic(client: SupabaseClient, paths: string[]): Promise<Result<void>> {
+  if (!paths.length) return okVoid;
+  const { error } = await client.storage.from(PUBLIC_BUCKET).remove(paths);
+  return error ? fail(reasonOf(error)) : okVoid;
+}
+
+async function clearPublicFolder(client: SupabaseClient, folder: string): Promise<Result<void>> {
+  const listed = await listPublicFolder(client, folder);
+  return listed.ok ? removePublic(client, listed.value) : listed;
 }
 
 async function copyToPublic(client: SupabaseClient, c: ImageCopy): Promise<Result<void>> {
@@ -189,7 +196,7 @@ export async function publishRecipe(
   const existing = await findMyPublication(client, userId, recipe.id);
   if (!existing.ok) return existing;
   if (existing.value?.status === "removed") return fail("unavailable");
-  const id = existing.value?.id ?? crypto.randomUUID();
+  const id = existing.value?.id ?? communityIdFor(userId, recipe.id);
   const { row, copies } = toSnapshot(recipe, id);
 
   if (!existing.value) {
@@ -197,9 +204,16 @@ export async function publishRecipe(
     if (ins.error) return fail(reasonOf(ins.error, ins.status));
   }
 
-  const cleared = await clearPublicFolder(client, id);
-  if (!cleared.ok) return cleared;
-  const copied = await mapLimit(copies, COPY_CONCURRENCY, (c) => copyToPublic(client, c));
+  // 增量同步公开目录：路径是 {id}/{imageId}.jpg，imageId 相同即同一张图，已在的不重复复制；
+  // 只删新快照里不再用到的图。重新发布已 published 的菜时，不变的图全程可访问。
+  const listed = await listPublicFolder(client, id);
+  if (!listed.ok) return listed;
+  const present = new Set(listed.value);
+  const targets = new Set(copies.map((c) => c.to));
+  const removed = await removePublic(client, listed.value.filter((p) => !targets.has(p)));
+  if (!removed.ok) return removed;
+  const toCopy = copies.filter((c) => !present.has(c.to));
+  const copied = await mapLimit(toCopy, COPY_CONCURRENCY, (c) => copyToPublic(client, c));
   if (!copied.ok) return copied;
 
   const { id: _id, ...content } = row;
@@ -361,7 +375,9 @@ export async function syncPublicAvatar(
   if (privateAvatarPath) {
     const file = await client.storage.from(PRIVATE_BUCKET).download(privateAvatarPath);
     if (file.error) return fail(reasonOf(file.error));
-    const up = await bucket.upload(publicPath, file.data, { upsert: true, contentType: "image/jpeg" });
+    // 与 media.ts 一致只上传 ArrayBuffer：RN 里直接传 Blob 会传成 0 字节。
+    const bytes = await file.data.arrayBuffer();
+    const up = await bucket.upload(publicPath, bytes, { upsert: true, contentType: "image/jpeg" });
     if (up.error) return fail(reasonOf(up.error));
   } else {
     const rm = await bucket.remove([publicPath]);

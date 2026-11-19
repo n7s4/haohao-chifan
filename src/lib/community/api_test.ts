@@ -106,12 +106,25 @@ Deno.test({
       const publicUrl = b.client.storage.from("community-media").getPublicUrl(cr.recipe.cover!.path!).data.publicUrl;
       assertEquals(await status(publicUrl), 200);
 
-      // 重新发布复用同一个 id
-      const again = await publishRecipe(a.client, a.id, { ...recipe, name: "集成测试番茄蛋 v2" });
+      // 重新发布复用同一个 id；加一张步骤图：封面不变，URL 一直 200
+      const stepImageId = crypto.randomUUID();
+      const stepPath = `${a.id}/${recipeId}/${stepImageId}.jpg`;
+      privatePaths.push(stepPath);
+      assertEquals((await a.client.storage.from("recipe-media").upload(stepPath, JPEG, { contentType: "image/jpeg" })).error, null);
+      const v2: Recipe = { ...recipe, name: "集成测试番茄蛋 v2", steps: [{ text: "炒", images: [{ id: stepImageId, path: stepPath }] }] };
+      const again = await publishRecipe(a.client, a.id, v2);
       assert(again.ok, JSON.stringify(again));
       assertEquals(again.value.id, cr.id);
       assertEquals(again.value.recipe.name, "集成测试番茄蛋 v2");
       assertEquals(await status(publicUrl), 200);
+      const stepUrl = b.client.storage.from("community-media").getPublicUrl(`${cr.id}/${stepImageId}.jpg`).data.publicUrl;
+      assertEquals(await status(stepUrl), 200);
+      // 再发布一次去掉步骤图：多余的图被删，封面仍 200
+      const v3 = await publishRecipe(a.client, a.id, { ...v2, steps: [{ text: "炒" }] });
+      assert(v3.ok, JSON.stringify(v3));
+      assertEquals(await status(publicUrl), 200);
+      const stepGone = await status(stepUrl);
+      assert(stepGone === 400 || stepGone === 404, `expected 400/404, got ${stepGone}`);
       const mine = await findMyPublication(a.client, a.id, recipeId);
       assert(mine.ok && mine.value?.id === cr.id);
 

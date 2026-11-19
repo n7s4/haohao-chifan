@@ -4,6 +4,7 @@
  */
 import type { Recipe } from "../../data/recipes";
 import type { RecipeStep, StepImage } from "../steps";
+import { deterministicId } from "../sync/ids";
 
 export type CommunityRecipe = {
   id: string;
@@ -111,6 +112,14 @@ function rewriteImages(
   const newCover = cover ? rewrite(cover) : undefined;
   const newSteps = steps.map((s) => (s.images ? { ...s, images: s.images.map(rewrite) } : { ...s }));
   return { cover: newCover, steps: newSteps, copies };
+}
+
+/**
+ * 首次发布时社区菜的 id：由作者 + 私有菜 id 确定性生成。
+ * 不用 crypto.randomUUID：RN 运行时没有它（项目也没装 polyfill）。
+ */
+export function communityIdFor(userId: string, sourceRecipeId: string): string {
+  return deterministicId(userId, "community", sourceRecipeId);
 }
 
 export function toSnapshot(

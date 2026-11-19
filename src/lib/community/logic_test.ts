@@ -3,6 +3,7 @@ import {
   applyLikeToggle,
   type CommentRow,
   communityFavoriteId,
+  communityIdFor,
   defaultNickname,
   favoriteIdFor,
   fromSnapshot,
@@ -153,4 +154,19 @@ Deno.test("applyLikeToggle", () => {
     rollback: { liked: true, count: 0 },
   });
   assertEquals(applyLikeToggle({ liked: true, count: 5 }).next, { liked: false, count: 4 });
+});
+
+Deno.test("communityIdFor: 稳定、uuid 形状、不依赖 crypto.randomUUID", () => {
+  const original = globalThis.crypto.randomUUID;
+  // deno-lint-ignore no-explicit-any
+  (globalThis.crypto as any).randomUUID = undefined;
+  try {
+    const a = communityIdFor("u1", "r1");
+    assertEquals(a, communityIdFor("u1", "r1"));
+    assert(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(a), a);
+    assert(a !== communityIdFor("u1", "r2"));
+    assert(a !== communityIdFor("u2", "r1"));
+  } finally {
+    globalThis.crypto.randomUUID = original;
+  }
 });
