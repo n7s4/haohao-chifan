@@ -305,3 +305,15 @@ export function mergeFeedPage<T extends { id: string }>(
   const seen = new Set(prev.map((x) => x.id));
   return { items: [...prev, ...page.filter((x) => !seen.has(x.id))], hasMore: page.length >= pageSize };
 }
+
+export type PublishAction = "publish" | "update" | "withdraw" | "view";
+
+/**
+ * 自己的菜谱详情「…」菜单里的社区操作。没发过 / 已撤回 → 发布（重新发布复用原来那行）；
+ * 已发布 → 更新、撤回、在社区查看；被管理员下架 → 什么都不能做。
+ */
+export function publishMenu(publication: Pick<CommunityRecipe, "status"> | null): PublishAction[] {
+  if (!publication || publication.status === "withdrawn") return ["publish"];
+  if (publication.status === "published") return ["update", "withdraw", "view"];
+  return [];
+}

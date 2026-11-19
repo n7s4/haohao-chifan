@@ -17,6 +17,7 @@ import {
   missingUploads,
   parseCommunityFavoriteId,
   planPool,
+  publishMenu,
   replyParentId,
   threadComments,
   toSnapshot,
@@ -296,4 +297,11 @@ Deno.test("commentTime：相对时间", () => {
   // 时钟偏差导致的「未来时间」也算刚刚；解析不了的给空串
   assertEquals(commentTime(new Date(now.getTime() + 60000).toISOString(), now), "刚刚");
   assertEquals(commentTime("bad", now), "");
+});
+
+Deno.test("publishMenu：没发过 / 已撤回 → 发布；已发布 → 更新、撤回、在社区查看；被下架 → 没有操作", () => {
+  assertEquals(publishMenu(null), ["publish"]);
+  assertEquals(publishMenu({ status: "withdrawn" }), ["publish"]);
+  assertEquals(publishMenu({ status: "published" }), ["update", "withdraw", "view"]);
+  assertEquals(publishMenu({ status: "removed" }), []);
 });

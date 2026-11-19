@@ -1,8 +1,8 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
-import { Image, Platform, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, {
   Easing,
   interpolate,
@@ -24,6 +24,8 @@ import Svg, { Circle, Path } from "react-native-svg";
 
 import { AddToPlanSheet } from "../../components/AddToPlanSheet";
 import { AppText } from "../../components/Common";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { ActionSheet, type SheetAction } from "../../components/community/ReportSheet";
 import { FoodArt } from "../../components/FoodArt";
 import {
   BackIcon,
@@ -39,6 +41,11 @@ import { type ArtKind, type Recipe, recipeSubtitle } from "../../data/recipes";
 import { useStore } from "../../state/store";
 import { ImageViewer, type ViewerImage } from "../../components/ImageViewer";
 import { RecipeBody, rise } from "../../components/recipe/RecipeBody";
+import { findMyPublication, publishRecipe, type Result, withdrawRecipe } from "../../lib/community/api";
+import { type CommunityRecipe, missingUploads, publishMenu } from "../../lib/community/logic";
+import { failMessage, useCommunityProfile } from "../../lib/community/useCommunityProfile";
+import { getSupabase } from "../../lib/supabase";
+import { useAuth } from "../../lib/useAuth";
 import { useMediaUris } from "../../lib/useMedia";
 import { colors, motion, radius, shadow, spacing } from "../../theme";
 
@@ -46,6 +53,12 @@ const IS_ANDROID = Platform.OS === "android";
 const ICON_BTN = IS_ANDROID ? 48 : 44;
 const BTN_RADIUS = IS_ANDROID ? radius.pill : 16;
 const FLYER = 64;
+const FALLBACK_NICKNAME = "吃饭的人";
+const WITHDRAW_MESSAGE = "撤回后其他人看不到这道菜，点赞和评论会保留，重新发布即可恢复";
+
+/** 网络异常（fetch 直接抛）也折成 Result，页面只处理一种失败形态。 */
+const settle = <T,>(p: Promise<Result<T>>): Promise<Result<T>> =>
+  p.catch((): Result<T> => ({ ok: false, reason: "network" }));
 
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -54,7 +67,7 @@ export default function RecipeDetailScreen() {
   const reduced = useReducedMotion();
   // 设计稿封面 380；小屏（SE 667）上按屏高比例收到 300，白卡别被挤到只剩两三行。
   const coverHeight = Math.round(Math.min(380, Math.max(300, windowHeight * 0.46)));
-  const { favorites, toggleFavorite, servings: servingsMap, setServings, ratings, findRecipe } = useStore();
+  const { favorites, toggleFavorite, servings: servingsMap, setServings, ratings, findRecipe, syncNow } = useStore();
   const recipe = findRecipe(id);
   const myRating = ratings[recipe?.id ?? ""] ?? 0;
   const servings = servingsMap[recipe?.id ?? ""] ?? 1;
@@ -105,6 +118,141 @@ export default function RecipeDetailScreen() {
     const at = gallery.findIndex((item) => item.key === key);
     if (at >= 0) setViewerIndex(at);
   };
+
+  // ---------------- 发布到社区（只有自建菜） ----------------
+  const { ready: authReady, userId } = useAuth();
+  const { ensure } = useCommunityProfile();
+  // findRecipe 按 id 精确匹配，路由参数就是这道菜的 id。
+  const recipeId = id;
+  const isCustom = recipe?.custom === true;
+  const pubKey = userId && recipeId && isCustom ? `${userId}:${recipeId}` : null;
+  // 发布状态带着所属账号和菜：换号 / 换菜后自然失效，不用在 effect 里同步清。
+  const [pubFor, setPubFor] = useState<{ key: string; cr: CommunityRecipe | null } | null>(null);
+  const publication = pubFor !== null && pubFor.key === pubKey ? pubFor.cr : null;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
+  /** 发布 / 撤回进行中的提示文案；非 null 时整页挡住，不能重复点。 */
+  const [busy, setBusy] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  /** 本地刚改过发布状态就加一：比它早发出的查询回来时丢弃，不把新状态盖回旧的。 */
+  const pubVersion = useRef(0);
+
+  const refreshPublication = useCallback(async (): Promise<CommunityRecipe | null | "error"> => {
+    if (!pubKey || !userId || !recipeId) return null;
+    const version = pubVersion.current;
+    const r = await settle(findMyPublication(getSupabase(), userId, recipeId));
+    if (!r.ok) return "error";
+    if (version === pubVersion.current) setPubFor({ key: pubKey, cr: r.value });
+    return r.value;
+  }, [pubKey, userId, recipeId]);
+
+  // 每次回到这页重查一次（可能刚在别处被下架 / 在另一台设备撤回）；查询不挡页面渲染。
+  useFocusEffect(
+    useCallback(() => {
+      void refreshPublication();
+    }, [refreshPublication])
+  );
+
+  const setPublication = (key: string, cr: CommunityRecipe | null) => {
+    pubVersion.current += 1;
+    setPubFor({ key, cr });
+  };
+
+  const runBusy = async (label: string, task: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(label);
+    try {
+      await task();
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
+  };
+
+  const requireLogin = (): string | null => {
+    if (!authReady) return null;
+    if (!userId) {
+      router.push("/sign-in");
+      return null;
+    }
+    return userId;
+  };
+
+  /** 图片还没传完：不发半截，顺手触发一次同步（会先补传图片）。 */
+  const imagesNotReady = () => {
+    show({ text: "图片还在上传，稍后再试" });
+    syncNow();
+  };
+
+  const onPublish = async () => {
+    setMenuOpen(false);
+    if (!recipe || busyRef.current) return;
+    const uid = requireLogin();
+    if (!uid) return;
+    if (missingUploads(recipe) > 0) return imagesNotReady();
+    if (!(await ensure())) return;
+    const key = `${uid}:${recipe.id}`;
+    const wasPublished = publication?.status === "published";
+    await runBusy("正在发布…", async () => {
+      const r = await settle(publishRecipe(getSupabase(), uid, recipe));
+      if (r.ok) {
+        setPublication(key, r.value);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        show({ text: wasPublished ? "已更新" : "已发布到社区" });
+        return;
+      }
+      if (r.reason === "invalid") return imagesNotReady();
+      // 失败后重查一次：首次发布中途失败会留下撤回状态的行；被下架时这里会显示「已被下架」。
+      const now = await refreshPublication();
+      if (now !== "error" && now?.status === "removed") return show({ text: "这道菜已被下架，不能再发布" });
+      show({ text: r.reason === "auth" ? failMessage("auth") : "网络不太好，没发出去" });
+    });
+  };
+
+  const onWithdraw = async () => {
+    setConfirmingWithdraw(false);
+    if (!recipe || !publication || busyRef.current) return;
+    const uid = requireLogin();
+    if (!uid) return;
+    const key = `${uid}:${recipe.id}`;
+    const target = publication;
+    await runBusy("正在撤回…", async () => {
+      const r = await settle(withdrawRecipe(getSupabase(), target.id));
+      if (r.ok) {
+        setPublication(key, { ...target, status: "withdrawn" });
+        show({ text: "已撤回" });
+        return;
+      }
+      // 状态可能已经改了、只是清图失败；以服务端为准。
+      await refreshPublication();
+      show({ text: r.reason === "auth" ? failMessage("auth") : "网络不太好，没撤回" });
+    });
+  };
+
+  const menuActions: SheetAction[] = publishMenu(publication).map((action) => {
+    if (action === "publish") return { label: "发布到社区", onPress: onPublish };
+    if (action === "update") return { label: "更新到社区", onPress: onPublish };
+    if (action === "withdraw") {
+      return {
+        label: "撤回",
+        danger: true,
+        onPress: () => {
+          setMenuOpen(false);
+          setConfirmingWithdraw(true);
+        },
+      };
+    }
+    return {
+      label: "在社区查看",
+      onPress: () => {
+        setMenuOpen(false);
+        if (publication) router.push(`/community/${publication.id}`);
+      },
+    };
+  });
+  const pubBadge =
+    publication?.status === "published" ? "已发布" : publication?.status === "removed" ? "已被下架" : null;
 
   if (!recipe) {
     return (
@@ -190,12 +338,26 @@ export default function RecipeDetailScreen() {
           ) : null}
 
           <Animated.View entering={rise(1)}>
-            <AppText size={28} weight="800" style={styles.title}>
-              {recipe.name}
-            </AppText>
+            <View style={styles.titleRow}>
+              <AppText size={28} weight="800" style={[styles.title, { flexShrink: 1 }]}>
+                {recipe.name}
+              </AppText>
+              {pubBadge ? (
+                <View style={[styles.tag, styles.pubBadge, pubBadge === "已发布" ? styles.tagLeaf : styles.tagMuted]}>
+                  <AppText size={12} weight="700" color={pubBadge === "已发布" ? colors.leafText : colors.muted}>
+                    {pubBadge}
+                  </AppText>
+                </View>
+              ) : null}
+            </View>
             <AppText size={15} color={colors.muted} style={{ lineHeight: 22 }}>
               {recipeSubtitle(recipe)}
             </AppText>
+            {recipe.origin ? (
+              <AppText size={13} color={colors.muted} style={styles.origin}>
+                来自 @{recipe.origin.authorNickname || FALLBACK_NICKNAME}
+              </AppText>
+            ) : null}
           </Animated.View>
 
           <Animated.View entering={rise(2)} style={styles.stats}>
@@ -246,6 +408,7 @@ export default function RecipeDetailScreen() {
             ? () => router.push({ pathname: "/create-recipe", params: { id: recipe.id } })
             : undefined
         }
+        onMore={recipe.custom && menuActions.length ? () => setMenuOpen(true) : undefined}
       />
 
       <View
@@ -311,6 +474,30 @@ export default function RecipeDetailScreen() {
           onClose={() => setAddingToPlan(false)}
           onDone={onPlaced}
         />
+      ) : null}
+
+      {menuOpen ? <ActionSheet actions={menuActions} onCancel={() => setMenuOpen(false)} /> : null}
+
+      {confirmingWithdraw ? (
+        <ConfirmDialog
+          title="撤回这道菜？"
+          message={WITHDRAW_MESSAGE}
+          confirmLabel="撤回"
+          destructive
+          onCancel={() => setConfirmingWithdraw(false)}
+          onConfirm={onWithdraw}
+        />
+      ) : null}
+
+      {busy ? (
+        <View style={styles.busyBackdrop} accessibilityViewIsModal>
+          <View style={styles.busyCard} accessibilityRole="progressbar" accessibilityLabel={busy}>
+            <ActivityIndicator color={colors.accent} />
+            <AppText size={15} weight="700">
+              {busy}
+            </AppText>
+          </View>
+        </View>
       ) : null}
     </View>
   );
@@ -439,6 +626,7 @@ function FloatBar({
   isFavorite,
   onToggleFavorite,
   onEdit,
+  onMore,
 }: {
   title: string;
   topInset: number;
@@ -447,6 +635,7 @@ function FloatBar({
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onEdit?: () => void;
+  onMore?: () => void;
 }) {
   const threshold = coverHeight - 80;
   const barBg = useAnimatedStyle(() => ({
@@ -484,6 +673,11 @@ function FloatBar({
         {onEdit ? (
           <Squish onPress={onEdit} label="编辑这道菜" style={[styles.iconBtn, glass]}>
             <PencilIcon size={20} color={colors.ink} />
+          </Squish>
+        ) : null}
+        {onMore ? (
+          <Squish onPress={onMore} label="更多" style={[styles.iconBtn, glass]}>
+            <MoreIcon size={22} color={colors.ink} />
           </Squish>
         ) : null}
         <HeartButton active={isFavorite} onPress={onToggleFavorite} glass={glass} />
@@ -665,6 +859,16 @@ function ArrowLeftIcon({ color = colors.ink, size = 22 }: { color?: string; size
   );
 }
 
+function MoreIcon({ color = colors.ink, size = 22 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={5.5} cy={12} r={1.8} fill={color} />
+      <Circle cx={12} cy={12} r={1.8} fill={color} />
+      <Circle cx={18.5} cy={12} r={1.8} fill={color} />
+    </Svg>
+  );
+}
+
 function PencilIcon({ color = colors.ink, size = 20 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -707,7 +911,28 @@ const styles = StyleSheet.create({
   tagTomato: { backgroundColor: colors.accentSoft },
   tagLeaf: { backgroundColor: colors.leafSoft },
   tagSun: { backgroundColor: colors.sunSoft },
+  tagMuted: { backgroundColor: colors.surfaceAlt },
   title: { letterSpacing: -0.6, lineHeight: 34, marginTop: 10, marginBottom: 6 },
+  titleRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  pubBadge: { marginTop: 15 },
+  origin: { marginTop: 4, lineHeight: 19 },
+  busyBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(23,31,46,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+  },
+  busyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    ...shadow.floating,
+  },
 
   stats: { flexDirection: "row", gap: spacing.sm, marginTop: 18, marginBottom: 6 },
   stat: {

@@ -5,7 +5,14 @@ import { loadAvatar, mirrorPublicAvatar } from "../account";
 import { getSupabase } from "../supabase";
 import { useAuth } from "../useAuth";
 import { validateNickname } from "./logic";
-import { ensurePublicProfile, getProfiles, renamePublicProfile, type FailReason, type Result } from "./api";
+import {
+  cleanupWithdrawnMedia,
+  ensurePublicProfile,
+  getProfiles,
+  renamePublicProfile,
+  type FailReason,
+  type Result,
+} from "./api";
 
 export type CommunityProfile = { nickname: string };
 
@@ -98,6 +105,15 @@ export function CommunityProfileProvider({ children }: { children: React.ReactNo
     // 放到微任务里：load 会 setState，不能在 effect 体内同步调用。
     loadRef.current = Promise.resolve().then(() => load(userId)).then(() => {});
   }, [userId, load]);
+
+  // 每次登录（含冷启动恢复会话）清一次：已撤回的菜（含另一台设备删菜触发的撤回）若公开桶还有图就删掉。
+  // 尽力而为，失败只告警；游客不跑。
+  useEffect(() => {
+    if (!userId) return;
+    cleanupWithdrawnMedia(getSupabase(), userId).catch((failure) =>
+      console.warn("[community] 清理已撤回菜的公开图片失败", failure)
+    );
+  }, [userId]);
 
   const ensure = useCallback(async () => {
     const uid = userRef.current;
