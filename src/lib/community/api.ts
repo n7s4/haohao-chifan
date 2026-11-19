@@ -407,10 +407,13 @@ export async function syncPublicAvatar(
   const publicPath = `avatars/${userId}.jpg`;
   const bucket = client.storage.from(PUBLIC_BUCKET);
   if (privateAvatarPath) {
-    const file = await client.storage.from(PRIVATE_BUCKET).download(privateAvatarPath);
-    if (file.error) return fail(reasonOf(file.error));
-    // 与 media.ts 一致只上传 ArrayBuffer：RN 里直接传 Blob 会传成 0 字节。
-    const bytes = await file.data.arrayBuffer();
+    // 不用 storage.download()：它返回的是 RN 的 Blob，没有 arrayBuffer()。
+    // 走签名地址 + fetch().arrayBuffer()，与 media.ts 一致只上传 ArrayBuffer（直接传 Blob 会传成 0 字节）。
+    const signed = await client.storage.from(PRIVATE_BUCKET).createSignedUrl(privateAvatarPath, 60);
+    if (signed.error) return fail(reasonOf(signed.error));
+    const res = await fetch(signed.data.signedUrl).catch(() => null);
+    if (!res?.ok) return fail("network");
+    const bytes = await res.arrayBuffer();
     const up = await bucket.upload(publicPath, bytes, { upsert: true, contentType: "image/jpeg" });
     if (up.error) return fail(reasonOf(up.error));
   } else {
