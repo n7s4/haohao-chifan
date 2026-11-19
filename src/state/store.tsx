@@ -20,6 +20,7 @@ import { hasContent, mergeGuestIntoAccount } from "../lib/sync/guestMerge";
 import { persistableImage, persistableSteps, type RecipeStep, type StepImage } from "../lib/steps";
 import { adoptLocalMedia, cachedMediaFile, removeRecipeMedia, uploadMedia } from "../lib/media";
 import { seedFromLocal } from "../lib/sync/bootstrap";
+import { planPool } from "../lib/community/logic";
 import { queueReplaceAll } from "../lib/sync/replaceAll";
 import {
   queueCookLog,
@@ -42,7 +43,31 @@ export type CustomRecipeInput = {
   steps: RecipeStep[];
   /** 成品图（封面）。选完图先带 localUri，保存时由 store 搬进缓存目录。 */
   cover?: StepImage | null;
+  // 以下可选：「存到我的菜谱」整道复制社区菜时才传；不传就和以前一样（新建取默认值、编辑保留原值）。
+  subtitle?: string;
+  description?: string;
+  tags?: string[];
+  difficulty?: string;
+  calories?: number;
+  heat?: string;
+  tips?: string[];
+  stepMinutes?: number[];
+  art?: Recipe["art"];
+  origin?: Recipe["origin"];
 };
+
+const OPTIONAL_INPUT_KEYS = [
+  "subtitle",
+  "description",
+  "tags",
+  "difficulty",
+  "calories",
+  "heat",
+  "tips",
+  "stepMinutes",
+  "art",
+  "origin",
+] as const;
 
 /** 主料 + 调料合并进同一份 ingredients，调料打 section 标记。名称空的整行丢掉。 */
 function normalizeCustomInput(input: CustomRecipeInput) {
@@ -69,7 +94,12 @@ function normalizeCustomInput(input: CustomRecipeInput) {
   const name = input.name.trim();
   if (!name || !ingredients.length) return null;
   const cover = input.cover?.id ? input.cover : undefined;
-  return { name, ingredients, steps, minutes: input.minutes ?? 0, cover };
+  // 只带调用方真给了的可选字段：没给的 key 不出现，编辑时 {...current, ...normalized} 才不会把原值抹成 undefined。
+  const extras: Partial<Pick<Recipe, (typeof OPTIONAL_INPUT_KEYS)[number]>> = {};
+  for (const key of OPTIONAL_INPUT_KEYS) {
+    if (input[key] !== undefined) (extras as Record<string, unknown>)[key] = input[key];
+  }
+  return { ...extras, name, ingredients, steps, minutes: input.minutes ?? 0, cover };
 }
 
 export type ShoppingItem = {
@@ -116,6 +146,9 @@ export type BackupPayload = PersistedState;
 
 let seq = 0;
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${seq++}`;
+
+/** 自建菜 id。「存到我的菜谱」要先定 id 才能算私有桶路径，所以单独导出。 */
+export const newCustomRecipeId = () => uid("custom");
 
 export const toKey = (date: Date) => {
   const year = date.getFullYear();
@@ -167,7 +200,8 @@ type Store = {
   findRecipe: (id: string | null | undefined) => Recipe | undefined;
   /** 某个餐位上排的菜；优先走合并源，自建菜也能取到。 */
   recipeFor: (plan: DayPlan, slot: MealSlot) => Recipe | undefined;
-  createRecipe: (input: CustomRecipeInput) => Recipe | null;
+  /** id 不传就新生成；传了必须来自 newCustomRecipeId()。 */
+  createRecipe: (input: CustomRecipeInput, id?: string) => Recipe | null;
   /** 只能改自建菜；内置/他人菜谱一律返回 null，UI 也不给入口。 */
   updateRecipe: (id: string, input: CustomRecipeInput) => Recipe | null;
   /** 只删自建菜：内置菜和别人的菜不在 customRecipes 里，返回 false。 */
@@ -787,6 +821,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           cover: recipe.cover,
           tips: recipe.tips,
           stepMinutes: recipe.stepMinutes,
+          origin: recipe.origin,
         })
       ),
     [pushRemote]
@@ -915,11 +950,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
    * upsert，换设备拉下来也是同一条。
    */
   const createRecipe = useCallback(
-    (input: CustomRecipeInput) => {
+    (input: CustomRecipeInput, id?: string) => {
       const normalized = normalizeCustomInput(input);
       if (!normalized) return null;
       const recipe: Recipe = {
-        id: uid("custom"),
+        id: id ?? newCustomRecipeId(),
         subtitle: "",
         description: "",
         difficulty: "",
@@ -1063,7 +1098,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   /** 空周引导：优先用收藏，没有收藏就从菜谱库挑，补满连续三天里空着的餐位。 */
   const planThreeDays = useCallback(
     (anchorKey?: string) => {
-      const pool = favorites.length ? favorites : allRecipes.map((recipe) => recipe.id);
+      const pool = planPool(favorites, allRecipes.map((recipe) => recipe.id));
       const today = toKey(new Date());
       // 看的是哪一周就排哪一周：本周从今天开始，其它周从周一开始（否则会排进用户看不见的那周）。
       const base = weekDays.includes(today)

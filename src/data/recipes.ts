@@ -32,6 +32,8 @@ export type Recipe = {
   updatedAt?: string;
   /** 用户自建（可同步、可删）；内置菜只读。 */
   custom?: boolean;
+  /** 从社区「存到我的菜谱」来的：记下社区菜 id 和当时的作者昵称。 */
+  origin?: { communityId: string; authorNickname: string };
 };
 
 /** 内置菜的步骤常量仍然写成字符串，导出时统一 normalize 成对象，改一处即可。 */

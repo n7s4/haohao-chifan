@@ -53,6 +53,7 @@ export type RemoteRecipeRow = {
   heat: string | null;
   tips: string[] | null;
   step_minutes: number[] | null;
+  origin?: unknown;
   deleted: boolean;
   updated_at: string;
 };
@@ -86,6 +87,13 @@ function toStrings(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
+function toOrigin(value: unknown): Recipe["origin"] {
+  if (!value || typeof value !== "object") return undefined;
+  const { communityId, authorNickname } = value as Record<string, unknown>;
+  if (typeof communityId !== "string" || !communityId) return undefined;
+  return { communityId, authorNickname: typeof authorNickname === "string" ? authorNickname : "" };
+}
+
 /** 云端一行自建菜谱 → 本地 `Recipe`。字段缺省走和新建时一样的默认值。 */
 export function recipeFromRemote(row: RemoteRecipeRow): Recipe {
   const art = ART_KINDS.includes(row.art as ArtKind) ? (row.art as ArtKind) : undefined;
@@ -105,6 +113,7 @@ export function recipeFromRemote(row: RemoteRecipeRow): Recipe {
     heat: row.heat ?? undefined,
     tips: toStrings(row.tips).length ? toStrings(row.tips) : undefined,
     stepMinutes: row.step_minutes ?? undefined,
+    origin: toOrigin(row.origin),
     updatedAt: row.updated_at,
     custom: true,
   };
@@ -153,7 +162,7 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot> {
     supabase
       .from("recipes")
       .select(
-        "id,name,subtitle,description,minutes,difficulty,calories,tags,art,cover,ingredients,steps,heat,tips,step_minutes,deleted,updated_at"
+        "id,name,subtitle,description,minutes,difficulty,calories,tags,art,cover,ingredients,steps,heat,tips,step_minutes,origin,deleted,updated_at"
       )
       .order("updated_at", { ascending: false })
       .limit(LIMIT),

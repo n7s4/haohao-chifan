@@ -182,6 +182,7 @@ async function queueLocalDiff(userId: string, prev: LocalState, next: LocalState
       art: recipe.art,
       tips: recipe.tips,
       stepMinutes: recipe.stepMinutes,
+      origin: recipe.origin,
     });
     await enqueue({ key: `recipes:${userId}:${recipe.id}`, userId, table: "recipes", conflict: "user_id,id", row });
     counts.recipes += 1;

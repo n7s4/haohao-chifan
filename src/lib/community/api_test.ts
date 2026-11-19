@@ -9,8 +9,10 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Recipe } from "../../data/recipes.ts";
+import { fromSnapshot } from "./logic.ts";
 import {
   addComment,
+  copyToPrivate,
   deleteComment,
   findMyPublication,
   getCommunityRecipe,
@@ -127,6 +129,28 @@ Deno.test({
       assert(stepGone === 400 || stepGone === 404, `expected 400/404, got ${stepGone}`);
       const mine = await findMyPublication(a.client, a.id, recipeId);
       assert(mine.ok && mine.value?.id === cr.id);
+
+      // B 把 A 的菜存到自己的菜谱：公开桶 → B 的私有桶，B 能用签名 URL 读到
+      const forB = fromSnapshot(v3.value, b.id, "custom-it-" + crypto.randomUUID(), "小A");
+      assertEquals(forB.copies.length, 1);
+      privatePaths.push(...forB.copies.map((c) => c.to));
+      assertEquals(await copyToPrivate(b.client, forB.copies), { ok: true, value: undefined });
+      const signed = await b.client.storage.from("recipe-media").createSignedUrl(forB.input.cover!.path!, 60);
+      assertEquals(signed.error, null);
+      assertEquals(await status(signed.data!.signedUrl), 200);
+      // A 读不到 B 的私有图
+      const peek = await a.client.storage.from("recipe-media").createSignedUrl(forB.input.cover!.path!, 60);
+      assert(peek.error !== null || (await status(peek.data!.signedUrl)) !== 200);
+      // 源图不存在 → 失败，且已复制的会被清掉
+      const bad = [
+        { from: `${cr.id}/${imageId}.jpg`, to: `${b.id}/bad-${crypto.randomUUID()}/ok.jpg` },
+        { from: `${cr.id}/missing.jpg`, to: `${b.id}/bad-${crypto.randomUUID()}/missing.jpg` },
+      ];
+      privatePaths.push(...bad.map((c) => c.to));
+      const failed = await copyToPrivate(b.client, bad);
+      assertEquals(failed.ok, false);
+      const leftover = await b.client.storage.from("recipe-media").createSignedUrl(bad[0].to, 60);
+      assert(leftover.error !== null, "失败时已复制的私有图应被清掉");
 
       // B 连点两次赞 → 都 ok，计数 1
       assertEquals(await setLike(b.client, b.id, cr.id, true), { ok: true, value: undefined });

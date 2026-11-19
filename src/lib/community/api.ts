@@ -180,6 +180,22 @@ async function copyToPublic(client: SupabaseClient, c: ImageCopy): Promise<Resul
   return error ? fail(reasonOf(error)) : okVoid;
 }
 
+/**
+ * 「存到我的菜谱」：把社区菜的图从公开桶复制到本人私有桶（并发 3）。
+ * 任何一张失败就尽力删掉已复制的，返回失败——调用方据此不建菜，不留半截。
+ */
+export async function copyToPrivate(client: SupabaseClient, copies: ImageCopy[]): Promise<Result<void>> {
+  const done: string[] = [];
+  const copied = await mapLimit(copies, COPY_CONCURRENCY, async (c) => {
+    const { error } = await client.storage.from(PUBLIC_BUCKET).copy(c.from, c.to, { destinationBucket: PRIVATE_BUCKET });
+    if (error) return fail(reasonOf(error));
+    done.push(c.to);
+    return okVoid;
+  });
+  if (!copied.ok && done.length) await client.storage.from(PRIVATE_BUCKET).remove(done);
+  return copied;
+}
+
 // ------------------------------------------------------------------ 发布 / 撤回
 
 /**

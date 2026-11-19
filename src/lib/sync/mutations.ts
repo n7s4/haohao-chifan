@@ -73,6 +73,7 @@ export type RecipeRow = {
   heat: string | null;
   tips: string[];
   step_minutes: number[];
+  origin: { communityId: string; authorNickname: string } | null;
   deleted: boolean;
   updated_at: string;
 };
@@ -225,6 +226,7 @@ export function buildRecipeRow(params: {
   cover?: StepImage | null;
   tips?: string[];
   stepMinutes?: number[];
+  origin?: { communityId: string; authorNickname: string } | null;
 }): RecipeRow {
   return {
     id: params.id,
@@ -244,6 +246,7 @@ export function buildRecipeRow(params: {
     heat: params.heat || null,
     tips: params.tips ?? [],
     step_minutes: params.stepMinutes ?? [],
+    origin: params.origin ?? null,
     deleted: params.deleted ?? false,
     updated_at: nowIso(),
   };

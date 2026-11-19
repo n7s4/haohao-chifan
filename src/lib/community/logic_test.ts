@@ -118,12 +118,59 @@ Deno.test("fromSnapshot", () => {
   };
   const out = fromSnapshot(cr, "u2", "new1", "小王");
   assertEquals(out.origin, { communityId: "cid", authorNickname: "小王" });
+  assertEquals(out.input.name, "番茄蛋");
+  assertEquals(out.input.minutes, 10);
+  assertEquals(out.input.subtitle, "s");
+  assertEquals(out.input.description, "d");
+  assertEquals(out.input.difficulty, "简单");
+  assertEquals(out.input.calories, 100);
+  assertEquals(out.input.tags, ["蛋"]);
+  assert(!JSON.stringify(out.input).includes("localUri"));
   assertEquals(out.input.ingredients.map((i) => i.name), ["番茄"]);
   assertEquals(out.input.seasonings?.map((i) => i.name), ["盐"]);
   assertEquals(out.input.cover?.path, "u2/new1/c1.jpg");
   assertEquals(out.input.steps[0].images?.[0].path, "u2/new1/i1.jpg");
   assertEquals(out.copies.length, 4);
   assertEquals(out.copies[0], { from: "cid/c1.jpg", to: "u2/new1/c1.jpg" });
+});
+
+Deno.test("fromSnapshot: 完整复制可选字段；没 path 的图不进复制清单", () => {
+  const cr = {
+    id: "cid", authorId: "u1", sourceRecipeId: "r1", builtin: false, status: "published" as const,
+    likeCount: 0, commentCount: 0, publishedAt: null,
+    recipe: {
+      name: "红烧肉", subtitle: "", description: "", minutes: 60, difficulty: "中等", calories: 800,
+      tags: ["肉"], art: "rice" as const, heat: "小火", tips: ["慢炖"], stepMinutes: [5, 55],
+      cover: { id: "c1", width: 4, height: 3 },
+      ingredients: [{ name: "五花肉", qty: 500, unit: "g" }],
+      steps: [{ text: "焯水", images: [{ id: "i1", path: "cid/i1.jpg" }, { id: "i2" }] }, { text: "炖" }],
+    },
+  };
+  const out = fromSnapshot(cr, "u2", "new1", "小李");
+  assertEquals(out.input.art, "rice");
+  assertEquals(out.input.heat, "小火");
+  assertEquals(out.input.tips, ["慢炖"]);
+  assertEquals(out.input.stepMinutes, [5, 55]);
+  assertEquals(out.input.subtitle, "");
+  assertEquals(out.input.cover, { id: "c1", width: 4, height: 3 });
+  assertEquals(out.input.steps[0].images, [{ id: "i1", path: "u2/new1/i1.jpg" }, { id: "i2" }]);
+  assertEquals(out.copies, [{ from: "cid/i1.jpg", to: "u2/new1/i1.jpg" }]);
+  assertEquals(cr.recipe.steps[0].images?.[0].path, "cid/i1.jpg"); // 不改入参
+});
+
+Deno.test("fromSnapshot: 社区菜缺省的可选字段不出现在 input 里", () => {
+  const cr = {
+    id: "cid", authorId: null, sourceRecipeId: "tomato-pasta", builtin: true, status: "published" as const,
+    likeCount: 0, commentCount: 0, publishedAt: null,
+    recipe: {
+      name: "面", subtitle: "", description: "", minutes: 0, difficulty: "", calories: 0, tags: [],
+      ingredients: [{ name: "面", qty: 1, unit: "把" }], steps: [{ text: "煮" }],
+    },
+  };
+  const out = fromSnapshot(cr, "u2", "new1", "好好吃饭");
+  for (const k of ["art", "heat", "tips", "stepMinutes"]) assert(!(k in out.input), k);
+  assertEquals(out.input.cover, null);
+  assertEquals(out.copies, []);
 });
 
 Deno.test("threadComments", () => {

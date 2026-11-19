@@ -26,6 +26,17 @@ export type SnapshotRecipeInput = {
   seasonings?: { name: string; qty: number | null; unit: string }[];
   steps: RecipeStep[];
   cover?: StepImage | null;
+  // 「存到我的菜谱」要整道菜复制：以下字段可选，不传时 createRecipe 走原来的默认值。
+  subtitle?: string;
+  description?: string;
+  tags?: string[];
+  difficulty?: string;
+  calories?: number;
+  heat?: string;
+  tips?: string[];
+  stepMinutes?: number[];
+  art?: Recipe["art"];
+  origin?: RecipeOrigin;
 };
 
 export type RecipeOrigin = { communityId: string; authorNickname: string };
@@ -162,6 +173,7 @@ export function fromSnapshot(
   const pick = ({ name, qty, unit }: { name: string; qty: number | null; unit: string }) => ({ name, qty, unit });
   const ingredients = cr.recipe.ingredients.filter((i) => i.section !== "seasoning").map(pick);
   const seasonings = cr.recipe.ingredients.filter((i) => i.section === "seasoning").map(pick);
+  const { subtitle, description, tags, difficulty, calories, heat, tips, stepMinutes, art } = cr.recipe;
   return {
     input: {
       name: cr.recipe.name,
@@ -170,6 +182,15 @@ export function fromSnapshot(
       seasonings,
       steps: r.steps,
       cover: r.cover ?? null,
+      subtitle,
+      description,
+      tags: [...tags],
+      difficulty,
+      calories,
+      ...(heat ? { heat } : {}),
+      ...(tips?.length ? { tips: [...tips] } : {}),
+      ...(stepMinutes?.length ? { stepMinutes: [...stepMinutes] } : {}),
+      ...(art ? { art } : {}),
     },
     origin: { communityId: cr.id, authorNickname },
     copies: r.copies,
