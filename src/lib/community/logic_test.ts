@@ -2,6 +2,7 @@ import { assert, assertEquals } from "jsr:@std/assert";
 import {
   applyLikeToggle,
   canSaveToMine,
+  likeAfterLookup,
   mergeFeedPage,
   type CommentRow,
   communityFavoriteId,
@@ -244,4 +245,9 @@ Deno.test("canSaveToMine：内置菜和自己发布的菜不显示，别人的�
   assertEquals(canSaveToMine(cr, "u1"), false);
   assertEquals(canSaveToMine({ authorId: null, builtin: true }, "u2"), false);
   assertEquals(canSaveToMine({ authorId: null, builtin: true }, null), false);
+});
+
+Deno.test("likeAfterLookup：本地不知道赞没赞时，查到已赞只同步显示，查到没赞才发点赞", () => {
+  assertEquals(likeAfterLookup(true), "sync");
+  assertEquals(likeAfterLookup(false), "toggle");
 });

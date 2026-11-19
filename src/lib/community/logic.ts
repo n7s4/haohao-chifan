@@ -222,6 +222,14 @@ export function applyLikeToggle(state: { liked: boolean; count: number }): {
   return { next: { liked, count }, rollback: { ...state } };
 }
 
+/**
+ * 点赞时本地还不知道赞没赞（刚登录 / 查询失败）：先查一次。查到已经赞过 → 只同步显示（sync），
+ * 不发请求、不改计数；查到没赞 → 按用户意图点赞（toggle）。
+ */
+export function likeAfterLookup(serverLiked: boolean): "sync" | "toggle" {
+  return serverLiked ? "sync" : "toggle";
+}
+
 export type CommentRow = {
   id: string;
   parentId: string | null;

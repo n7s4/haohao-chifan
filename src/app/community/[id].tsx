@@ -36,8 +36,15 @@ import {
   type Result,
   setLike,
 } from "../../lib/community/api";
-import { applyLikeToggle, canSaveToMine, type CommunityRecipe, favoriteIdFor } from "../../lib/community/logic";
-import { failMessage, useCommunityProfile } from "../../lib/community/useCommunityProfile";
+import {
+  applyLikeToggle,
+  canSaveToMine,
+  type CommunityRecipe,
+  favoriteIdFor,
+  likeAfterLookup,
+  parseCommunityFavoriteId,
+} from "../../lib/community/logic";
+import { failMessage } from "../../lib/community/useCommunityProfile";
 import { useSaveToMine } from "../../lib/community/useSaveToMine";
 import type { StepImage } from "../../lib/steps";
 import { getSupabase } from "../../lib/supabase";
@@ -49,6 +56,8 @@ const IS_ANDROID = Platform.OS === "android";
 const ICON_BTN = IS_ANDROID ? 48 : 44;
 const PUBLIC_BUCKET = "community-media";
 const BRAND_NAME = "好好吃饭";
+/** 作者资料取不到时的兜底昵称（与默认昵称同前缀，不暴露任何账号信息）。 */
+const FALLBACK_NICKNAME = "吃饭的人";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const BRAND_MARK = require("../../../assets/icon.png");
 
@@ -74,14 +83,14 @@ export default function CommunityRecipeScreen() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const coverHeight = Math.round(Math.min(340, Math.max(260, windowHeight * 0.4)));
   const { ready: authReady, userId } = useAuth();
-  const { ensure } = useCommunityProfile();
   const { favorites, toggleFavorite } = useStore();
   const saveToMine = useSaveToMine();
   const { toast, show, showText, undo } = useToast();
 
   const [page, setPage] = useState<PageState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
-  const [author, setAuthor] = useState<PublicProfile | null>(null);
+  // undefined = 还在读；null = 读失败或没有公开资料（显示兜底昵称）。
+  const [author, setAuthor] = useState<PublicProfile | null | undefined>(undefined);
   const [likeCount, setLikeCount] = useState(0);
   // 「我赞没赞」带着所属账号：换账号 / 登出后自然失效，不用在 effect 里同步清。
   const [likedFor, setLikedFor] = useState<{ userId: string; liked: boolean } | null>(null);
@@ -100,7 +109,9 @@ export default function CommunityRecipeScreen() {
   const commentsRef = useRef<React.ComponentRef<typeof View>>(null);
   const commentsY = useRef(0);
 
-  const cr = page.status === "ready" ? page.cr : null;
+  // 路由没带 id：没有可读的菜，直接显示已下架，不会一直转圈。
+  const view: PageState = id ? page : { status: "unavailable" };
+  const cr = view.status === "ready" ? view.cr : null;
   const liked = likedFor !== null && likedFor.userId === userId ? likedFor.liked : null;
 
   const markUnavailable = useCallback(() => setPage({ status: "unavailable" }), []);
@@ -130,7 +141,7 @@ export default function CommunityRecipeScreen() {
       if (r.value.builtin || !authorId) return;
       // 作者资料取不到只影响头像昵称的显示，不当作菜不可用。
       settle(getProfiles(client, [authorId])).then((p) => {
-        if (!cancelled && p.ok) setAuthor(p.value.get(authorId) ?? null);
+        if (!cancelled) setAuthor(p.ok ? p.value.get(authorId) ?? null : null);
       });
     });
     return () => {
@@ -174,12 +185,13 @@ export default function CommunityRecipeScreen() {
 
   const recipe: Recipe | null = useMemo(() => (cr ? { ...cr.recipe, id: cr.id, custom: false } : null), [cr]);
 
-  if (page.status !== "ready" || !cr || !recipe) {
-    return <StatusScreen state={page} topInset={insets.top} onRetry={retry} />;
+  if (view.status !== "ready" || !cr || !recipe) {
+    return <StatusScreen state={view} topInset={insets.top} onRetry={retry} />;
   }
 
   const isBuiltin = cr.builtin;
-  const authorName = isBuiltin ? BRAND_NAME : author?.nickname ?? "";
+  const authorLoading = !isBuiltin && author === undefined;
+  const authorName = isBuiltin ? BRAND_NAME : author === undefined ? "" : author?.nickname || FALLBACK_NICKNAME;
   const favId = favoriteIdFor(cr, userId);
   const isFavorite = favorites.includes(favId);
   const showSave = canSaveToMine(cr, userId);
@@ -212,7 +224,12 @@ export default function CommunityRecipeScreen() {
         // 还不知道赞没赞过（刚登录 / 查询失败）：先查一次，不然可能多算一个赞。
         const mine = await settle(myLikes(client, uid, [cr.id]));
         if (!mine.ok) return onFail(mine.reason, "网络不太好，没发出去");
-        current = mine.value.has(cr.id);
+        if (likeAfterLookup(mine.value.has(cr.id)) === "sync") {
+          // 其实已经赞过：只同步显示，不再发请求、不改计数。
+          setLikedFor({ userId: uid, liked: true });
+          return;
+        }
+        current = false;
       }
       const { next, rollback } = applyLikeToggle({ liked: current, count: likeCount });
       setLikedFor({ userId: uid, liked: next.liked });
@@ -231,19 +248,26 @@ export default function CommunityRecipeScreen() {
   };
 
   const onFavorite = () => {
-    if (!requireLogin()) return;
+    // 内置菜（和自己的菜）收藏的是本地 id，游客也能收藏；只有 community: 收藏需要登录。
+    if (parseCommunityFavoriteId(favId) !== null && !requireLogin()) return;
     toggleFavorite(favId);
     if (isFavorite) show({ text: "已取消收藏", undo: () => toggleFavorite(favId) });
   };
 
   const onSave = async () => {
-    if (saveBusy.current) return;
+    if (saveBusy.current || authorLoading) return;
     if (!requireLogin()) return;
     saveBusy.current = true;
     setSaving(true);
     try {
       const r = await saveToMine(cr, authorName);
-      if (!r.ok) return onFail(r.reason);
+      if (!r.ok) {
+        if (r.reason !== "unavailable") return onFail(r.reason);
+        // 复制图片的 Storage 错误也会折成 unavailable：重新读一次菜，确认真的下架了才切页面。
+        const again = await settle(getCommunityRecipe(getSupabase(), cr.id));
+        if (!again.ok && again.reason === "unavailable") return markUnavailable();
+        return showText("没存上，稍后再试");
+      }
       showText("已存到我的菜谱");
       router.push(`/recipe/${r.recipeId}`);
     } finally {
@@ -256,10 +280,9 @@ export default function CommunityRecipeScreen() {
     scrollRef.current?.scrollTo({ y: Math.max(0, commentsY.current - insets.top - 64), animated: true });
   };
 
-  const onReportMenu = async () => {
+  const onReportMenu = () => {
     setMenuOpen(false);
     if (!requireLogin()) return;
-    if (!(await ensure())) return;
     setReporting(true);
   };
 
@@ -397,7 +420,7 @@ export default function CommunityRecipeScreen() {
               {cr.commentCount}
             </AppText>
           </BarButton>
-          {showSave ? <SaveButton saving={saving} onPress={onSave} /> : null}
+          {showSave ? <SaveButton saving={saving} disabled={authorLoading} onPress={onSave} /> : null}
         </View>
       </View>
 
@@ -530,20 +553,21 @@ function BarButton({
   );
 }
 
-function SaveButton({ saving, onPress }: { saving: boolean; onPress: () => void }) {
+function SaveButton({ saving, disabled, onPress }: { saving: boolean; disabled: boolean; onPress: () => void }) {
   const press = usePressScale();
+  const off = saving || disabled;
   return (
     <Pressable
       onPress={onPress}
       onPressIn={press.onPressIn}
       onPressOut={press.onPressOut}
-      disabled={saving}
+      disabled={off}
       accessibilityRole="button"
       accessibilityLabel="存到我的菜谱"
-      accessibilityState={{ disabled: saving, busy: saving }}
+      accessibilityState={{ disabled: off, busy: saving }}
       style={{ flex: 1 }}
     >
-      <Animated.View style={[styles.saveBtn, saving && { opacity: 0.7 }, press.style]}>
+      <Animated.View style={[styles.saveBtn, off && { opacity: 0.7 }, press.style]}>
         {saving ? <ActivityIndicator color={colors.white} size="small" /> : null}
         <AppText size={16} weight="700" color={colors.white} numberOfLines={1}>
           存到我的菜谱
