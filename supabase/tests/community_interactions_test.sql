@@ -2,7 +2,7 @@
 begin;
 set local client_min_messages = warning;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(51);
 
 -- 测试用户：A（作者）、B、C
 insert into auth.users (id, instance_id, aud, role, email) values
@@ -75,6 +75,21 @@ select throws_ok($$insert into public.community_comments (community_recipe_id, u
 select throws_ok($$insert into public.community_comments (community_recipe_id, user_id, parent_id, body) values ('aaaaaaaa-0000-4000-8000-000000000013', '22222222-2222-4222-8222-222222222222', 'cccccccc-0000-4000-8000-000000000001', '跨菜回复')$$,
   '23514', null, 'parent 属于另一道菜 → 报错');
 select is((select comment_count from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000011'), 2, '评论后 comment_count = 2');
+
+-- 「回复 @某人」（008）
+select has_column('public', 'community_comments', 'reply_to_user_id', 'community_comments.reply_to_user_id 存在');
+select lives_ok($$insert into public.community_comments (id, community_recipe_id, user_id, parent_id, reply_to_user_id, body) values ('cccccccc-0000-4000-8000-000000000009', 'aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', 'cccccccc-0000-4000-8000-000000000001', '22222222-2222-4222-8222-222222222222', '回复楼里的人')$$,
+  '回复同一楼里发过言的人可以');
+select throws_ok($$insert into public.community_comments (community_recipe_id, user_id, parent_id, reply_to_user_id, body) values ('aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', 'cccccccc-0000-4000-8000-000000000001', '33333333-3333-4333-8333-333333333333', '回复不在楼里的人')$$,
+  '23514', null, '回复对象不在这一楼 → 报错');
+select throws_ok($$insert into public.community_comments (community_recipe_id, user_id, reply_to_user_id, body) values ('aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', '22222222-2222-4222-8222-222222222222', '没有 parent')$$,
+  '23514', null, '顶层评论不能带回复对象');
+select throws_ok($$update public.community_comments set reply_to_user_id = null where id = 'cccccccc-0000-4000-8000-000000000009'$$,
+  '23514', null, '客户端不能改回复对象');
+reset role;
+delete from public.community_comments where id = 'cccccccc-0000-4000-8000-000000000009';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated"}';
 
 insert into public.community_comments (id, community_recipe_id, user_id, body) values ('cccccccc-0000-4000-8000-000000000003', 'aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', '要被删的');
 insert into public.community_comments (id, community_recipe_id, user_id, body) values ('cccccccc-0000-4000-8000-000000000004', 'aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', 'A 来删');

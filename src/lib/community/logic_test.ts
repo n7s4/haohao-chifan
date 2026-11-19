@@ -21,6 +21,7 @@ import {
   planPool,
   publishMenu,
   replyParentId,
+  replyTargetOf,
   threadComments,
   toSnapshot,
   validateCommentBody,
@@ -199,7 +200,7 @@ Deno.test("fromSnapshot: 社区菜缺省的可选字段不出现在 input 里", 
 
 Deno.test("threadComments", () => {
   const c = (id: string, parentId: string | null, createdAt: string, deleted = false): CommentRow => ({
-    id, parentId, userId: "u", body: id, deleted, createdAt,
+    id, parentId, replyToUserId: null, userId: "u", body: id, deleted, createdAt,
   });
   const rows = [
     c("a", null, "2026-01-01"),
@@ -270,14 +271,14 @@ Deno.test("likeAfterLookup：本地不知道赞没赞时，查到已赞只同步
 
 
 Deno.test("replyParentId：回复只挂一层，回复的回复挂到顶层", () => {
-  const top: CommentRow = { id: "a", parentId: null, userId: "u1", body: "x", deleted: false, createdAt: "1" };
-  const reply: CommentRow = { id: "b", parentId: "a", userId: "u2", body: "y", deleted: false, createdAt: "2" };
+  const top: CommentRow = { id: "a", parentId: null, replyToUserId: null, userId: "u1", body: "x", deleted: false, createdAt: "1" };
+  const reply: CommentRow = { id: "b", parentId: "a", replyToUserId: null, userId: "u2", body: "y", deleted: false, createdAt: "2" };
   assertEquals(replyParentId(top), "a");
   assertEquals(replyParentId(reply), "a");
 });
 
 Deno.test("commentActions：本人或菜的作者可删，别人的评论可举报", () => {
-  const c: CommentRow = { id: "a", parentId: null, userId: "u1", body: "x", deleted: false, createdAt: "1" };
+  const c: CommentRow = { id: "a", parentId: null, replyToUserId: null, userId: "u1", body: "x", deleted: false, createdAt: "1" };
   assertEquals(commentActions(c, "u1", "author"), ["delete"]);
   assertEquals(commentActions(c, "author", "author"), ["delete", "report"]);
   assertEquals(commentActions(c, "u2", "author"), ["report"]);
@@ -354,4 +355,11 @@ Deno.test("mergeFavoriteEntries: 重复的社区收藏只出现一次", () => {
 Deno.test("mergeFavoriteEntries: 上次没请求过的新收藏按加载中处理，不算已下架", () => {
   const out = mergeFavoriteEntries(["community:new"], new Set(), { state: "ok", rows: [], requested: ["old"] });
   assertEquals(out, [{ kind: "unloaded", favId: "community:new", failed: false }]);
+});
+
+Deno.test("replyTargetOf：回复顶层评论不带回复对象，回复楼中楼记下在回谁", () => {
+  const top: CommentRow = { id: "a", parentId: null, replyToUserId: null, userId: "u1", body: "x", deleted: false, createdAt: "1" };
+  const reply: CommentRow = { id: "b", parentId: "a", replyToUserId: null, userId: "u2", body: "y", deleted: false, createdAt: "2" };
+  assertEquals(replyTargetOf(top), { parentId: "a", replyToUserId: null });
+  assertEquals(replyTargetOf(reply), { parentId: "a", replyToUserId: "u2" });
 });

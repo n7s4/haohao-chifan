@@ -240,6 +240,8 @@ export function likeAfterLookup(serverLiked: boolean): "sync" | "toggle" {
 export type CommentRow = {
   id: string;
   parentId: string | null;
+  /** 楼中楼里「回复 @某人」的那个人；直接回复顶层评论时为 null。 */
+  replyToUserId: string | null;
   userId: string;
   body: string;
   deleted: boolean;
@@ -262,6 +264,11 @@ export function threadComments(rows: CommentRow[]): { comment: CommentRow; repli
 /** 回复只有一层：回复别人的回复时，挂到那条回复所在的顶层评论下。 */
 export function replyParentId(c: CommentRow): string {
   return c.parentId ?? c.id;
+}
+
+/** 回复某条评论时要发给服务器的：挂在哪个顶层评论下，以及（回复的是楼中楼时）在回谁。 */
+export function replyTargetOf(c: CommentRow): { parentId: string; replyToUserId: string | null } {
+  return { parentId: replyParentId(c), replyToUserId: c.parentId ? c.userId : null };
 }
 
 /**

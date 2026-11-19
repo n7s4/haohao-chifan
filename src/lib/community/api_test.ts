@@ -12,6 +12,7 @@ import type { Recipe } from "../../data/recipes.ts";
 import { fromSnapshot } from "./logic.ts";
 import {
   addComment,
+  listComments,
   cleanupWithdrawnMedia,
   copyToPrivate,
   deleteComment,
@@ -198,6 +199,22 @@ Deno.test({
       assertEquals(c.value.body, "好吃");
       assertEquals(await deleteComment(b.client, c.value.id), { ok: true, value: undefined });
       assertEquals(await deleteComment(b.client, c.value.id), { ok: true, value: undefined });
+
+      // 楼中楼「回复 @某人」：B 发顶层，A 回复 B，B 再回复 A（记下 replyToUserId）
+      const thread = await addComment(b.client, b.id, cr.id, "顶层");
+      assert(thread.ok, JSON.stringify(thread));
+      const reply1 = await addComment(a.client, a.id, cr.id, "回 B", thread.value.id);
+      assert(reply1.ok, JSON.stringify(reply1));
+      assertEquals(reply1.value.replyToUserId, null);
+      const reply2 = await addComment(b.client, b.id, cr.id, "回 A", thread.value.id, a.id);
+      assert(reply2.ok, JSON.stringify(reply2));
+      assertEquals(reply2.value.replyToUserId, a.id);
+      const threadList = await listComments(b.client, cr.id);
+      assert(threadList.ok);
+      assertEquals(threadList.value.find((x) => x.id === reply2.value.id)?.replyToUserId, a.id);
+      // 回复对象不在这一楼 → 被拒
+      const badReply = await addComment(a.client, a.id, cr.id, "乱指", thread.value.id, crypto.randomUUID());
+      assertEquals(badReply.ok, false);
 
       // 公开桶不能被列举：anon 什么都列不出，B 列不出 avatars/（已发布菜的目录登录用户可读，存菜要复制）；A 自己能列
       const anon = createClient(url, anonKey, noSession);

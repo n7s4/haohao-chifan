@@ -106,6 +106,7 @@ function rowToComment(row: Row): CommentRow {
   return {
     id: str(row.id),
     parentId: typeof row.parent_id === "string" ? row.parent_id : null,
+    replyToUserId: typeof row.reply_to_user_id === "string" ? row.reply_to_user_id : null,
     userId: str(row.user_id),
     body: str(row.body),
     deleted: row.deleted === true,
@@ -296,7 +297,7 @@ export async function myLikes(client: SupabaseClient, userId: string, ids: strin
 
 // ------------------------------------------------------------------ 评论
 
-const COMMENT_COLS = "id, parent_id, user_id, body, deleted, created_at";
+const COMMENT_COLS = "id, parent_id, reply_to_user_id, user_id, body, deleted, created_at";
 
 export async function listComments(client: SupabaseClient, communityId: string): Promise<Result<CommentRow[]>> {
   const { data, error, status } = await client.from("community_comments").select(COMMENT_COLS)
@@ -312,11 +313,13 @@ export async function addComment(
   communityId: string,
   body: string,
   parentId?: string,
+  replyToUserId?: string | null,
 ): Promise<Result<CommentRow>> {
   const v = validateCommentBody(body);
   if (!v.ok) return fail("invalid");
   const { data, error, status } = await client.from("community_comments")
-    .insert({ community_recipe_id: communityId, user_id: userId, body: v.value, parent_id: parentId ?? null })
+    .insert({ community_recipe_id: communityId, user_id: userId, body: v.value, parent_id: parentId ?? null,
+      reply_to_user_id: parentId ? (replyToUserId ?? null) : null })
     .select(COMMENT_COLS).single();
   if (error) return fail(reasonOf(error, status));
   return ok(rowToComment(data));

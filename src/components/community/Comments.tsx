@@ -37,7 +37,7 @@ import {
   commentLength,
   type CommentRow,
   commentTime,
-  replyParentId,
+  replyTargetOf,
   threadComments,
   validateCommentBody,
 } from "../../lib/community/logic";
@@ -66,7 +66,7 @@ export type CommentsHandle = {
 };
 
 type LoadState = { status: "loading" } | { status: "error" } | { status: "ready"; rows: CommentRow[] };
-type ReplyTarget = { parentId: string; nickname: string };
+type ReplyTarget = { parentId: string; replyToUserId: string | null; nickname: string };
 
 /**
  * 社区菜详情的评论区：列表（一层回复）+ 底部评论框（键盘弹起时贴在键盘上方）+ 长按操作（删除 / 举报）。
@@ -173,7 +173,7 @@ export function Comments({
     opening.current = true;
     try {
       if (!(await ensure()) || !mounted.current) return;
-      setReplyTo(target ? { parentId: replyParentId(target), nickname: nicknameOf(target.userId) } : null);
+      setReplyTo(target ? { ...replyTargetOf(target), nickname: nicknameOf(target.userId) } : null);
       setComposing(true);
     } finally {
       opening.current = false;
@@ -208,7 +208,7 @@ export function Comments({
     setSending(true);
     try {
       const parentId = replyTo?.parentId;
-      const r = await settle(addComment(getSupabase(), uid, communityRecipeId, v.value, parentId));
+      const r = await settle(addComment(getSupabase(), uid, communityRecipeId, v.value, parentId, replyTo?.replyToUserId));
       if (!mounted.current) return null;
       if (r.ok) {
         const row = r.value;
@@ -356,6 +356,7 @@ export function Comments({
                     key={reply.id}
                     small
                     comment={reply}
+                    replyToNickname={reply.replyToUserId && reply.replyToUserId !== reply.userId ? nicknameOf(reply.replyToUserId) : undefined}
                     profile={profiles.get(reply.userId)}
                     nickname={nicknameOf(reply.userId)}
                     time={commentTime(reply.createdAt, now)}
@@ -415,6 +416,7 @@ function CommentItem({
   nickname,
   time,
   small = false,
+  replyToNickname,
   onReply,
   onLongPress,
 }: {
@@ -423,20 +425,29 @@ function CommentItem({
   nickname: string;
   time: string;
   small?: boolean;
+  /** 楼中楼里在回谁，显示成「小王 回复 @小李」。 */
+  replyToNickname?: string;
   onReply: () => void;
   onLongPress: () => void;
 }) {
   return (
     <Pressable
+      onPress={onReply}
       onLongPress={onLongPress}
       delayLongPress={400}
       style={({ pressed }) => [styles.item, pressed && { opacity: 0.85 }]}
-      accessibilityHint="长按可删除或举报"
+      accessibilityHint="点按回复，长按可删除或举报"
     >
       <Avatar uri={profile?.avatarUrl ?? null} name={nickname} size={small ? 26 : 34} />
       <View style={{ flex: 1 }}>
         <AppText size={13} weight="700" color={colors.muted} numberOfLines={1}>
           {nickname}
+          {replyToNickname ? (
+            <AppText size={13} weight="400" color={colors.placeholder}>
+              {" 回复 "}
+              <AppText size={13} weight="700" color={colors.muted}>@{replyToNickname}</AppText>
+            </AppText>
+          ) : null}
         </AppText>
         <AppText size={15} style={styles.body}>
           {comment.body}
