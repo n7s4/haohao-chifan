@@ -2,7 +2,7 @@
 begin;
 set local client_min_messages = warning;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(43);
 
 -- 测试用户：A（作者）、B、C
 insert into auth.users (id, instance_id, aud, role, email) values
@@ -55,6 +55,10 @@ select throws_ok($$insert into public.community_comments (community_recipe_id, u
   '23514', null, '空白评论被拒');
 select throws_ok($$insert into public.community_comments (community_recipe_id, user_id, body) values ('aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', repeat('a', 501))$$,
   '23514', null, '501 字评论被拒');
+select throws_ok($$insert into public.community_comments (community_recipe_id, user_id, body) values ('aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', E'\n\t')$$,
+  '23514', null, '只有换行 / 制表符的评论被拒');
+select throws_ok($$insert into public.community_comments (community_recipe_id, user_id, body) values ('aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', E'\u3000\u3000')$$,
+  '23514', null, '只有全角空格的评论被拒');
 select lives_ok($$insert into public.community_comments (id, community_recipe_id, user_id, body) values ('cccccccc-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', repeat('🍜', 500))$$,
   '500 个 emoji（按码点计）可以');
 select lives_ok($$insert into public.community_comments (id, community_recipe_id, user_id, parent_id, body) values ('cccccccc-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000011', '22222222-2222-4222-8222-222222222222', 'cccccccc-0000-4000-8000-000000000001', '回复')$$,
@@ -98,6 +102,15 @@ select is((select count(*)::int from public.community_comments where id in ('ccc
 select is((select count(*)::int from public.community_comments where id = 'cccccccc-0000-4000-8000-000000000003'), 1, '已删除评论仍可见（显示「该评论已删除」）');
 select is((select body from public.community_comments where id = 'cccccccc-0000-4000-8000-000000000003'), '', 'anon 读不到已删评论原文');
 
+-- 注销账号（硬删除）→ 未删除的评论计数减掉
+reset role;
+insert into auth.users (id, instance_id, aud, role, email) values
+  ('44444444-4444-4444-8444-444444444444', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'd@example.com');
+insert into public.community_comments (community_recipe_id, user_id, body) values ('aaaaaaaa-0000-4000-8000-000000000011', '44444444-4444-4444-8444-444444444444', 'D 的评论');
+select is((select comment_count from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000011'), 3, 'D 评论后 comment_count = 3');
+delete from auth.users where id = '44444444-4444-4444-8444-444444444444';
+select is((select comment_count from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000011'), 2, '注销 D 后 comment_count 回到 2');
+
 -- 撤回菜后评论不可见
 reset role;
 insert into public.community_comments (id, community_recipe_id, user_id, body) values ('cccccccc-0000-4000-8000-000000000005', 'aaaaaaaa-0000-4000-8000-000000000013', '22222222-2222-4222-8222-222222222222', 'R3 的评论');
@@ -114,6 +127,8 @@ select throws_ok($$insert into public.community_reports (reporter_id, community_
 select lives_ok($$insert into public.community_reports (reporter_id, comment_id, reason) values ('22222222-2222-4222-8222-222222222222', 'cccccccc-0000-4000-8000-000000000004', 'unfriendly')$$, 'B 举报评论');
 select throws_ok($$insert into public.community_reports (reporter_id, community_recipe_id, comment_id, reason) values ('22222222-2222-4222-8222-222222222222', 'aaaaaaaa-0000-4000-8000-000000000013', 'cccccccc-0000-4000-8000-000000000005', 'ad')$$,
   '23514', null, '目标必须恰好一个');
+select throws_ok($$insert into public.community_reports (reporter_id, community_recipe_id, reason, resolved) values ('22222222-2222-4222-8222-222222222222', 'aaaaaaaa-0000-4000-8000-000000000013', 'ad', true)$$,
+  '42501', null, '客户端不能插入 resolved = true 的举报');
 select is((select count(*)::int from public.community_reports), 0, 'B select 举报表 → 0 行');
 
 select * from finish();

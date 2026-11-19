@@ -356,10 +356,15 @@ create table if not exists public.community_comments (
   deleted boolean not null default false,
   hidden boolean not null default false,
   created_at timestamptz not null default now(),
-  -- char_length 按 Unicode 码点计；删除后 body 为空串，不再校验长度
+  -- char_length 按 Unicode 码点计；空格 / \t / \r / \n / 全角空格 U+3000 视为空白；
+  -- 删除后 body 为空串，不再校验长度
   constraint community_comments_body_len
-    check (deleted or char_length(btrim(body)) between 1 and 500)
+    check (deleted or char_length(btrim(body, E' \t\r\n\u3000')) between 1 and 500)
 );
+-- 表已存在时也刷新成最新的 check（重复执行安全）。
+alter table public.community_comments drop constraint if exists community_comments_body_len;
+alter table public.community_comments add constraint community_comments_body_len
+  check (deleted or char_length(btrim(body, E' \t\r\n\u3000')) between 1 and 500);
 create index if not exists community_comments_recipe_idx
   on public.community_comments (community_recipe_id, created_at);
 create index if not exists community_comments_parent_idx
@@ -487,6 +492,14 @@ begin
          set comment_count = comment_count + 1
        where id = new.community_recipe_id;
     end if;
+  elsif tg_op = 'DELETE' then
+    -- 硬删除（注销账号 / 父评论级联）：未软删的才计过数
+    if not old.deleted then
+      update public.community_recipes
+         set comment_count = greatest(comment_count - 1, 0)
+       where id = old.community_recipe_id;
+    end if;
+    return old;
   elsif new.deleted and not old.deleted then
     update public.community_recipes
        set comment_count = greatest(comment_count - 1, 0)
@@ -499,7 +512,7 @@ revoke all on function public.community_comments_count() from public, anon, auth
 
 drop trigger if exists community_comments_count on public.community_comments;
 create trigger community_comments_count
-  after insert or update of deleted on public.community_comments
+  after insert or update of deleted or delete on public.community_comments
   for each row execute function public.community_comments_count();
 
 -- -------------------------------------------------------- community_reports
@@ -522,5 +535,5 @@ alter table public.community_reports enable row level security;
 
 drop policy if exists community_reports_insert_own on public.community_reports;
 create policy community_reports_insert_own on public.community_reports
-  for insert to authenticated with check (reporter_id = auth.uid());
+  for insert to authenticated with check (reporter_id = auth.uid() and resolved = false);
 -- 不给 select / update / delete：管理员在 Dashboard（postgres / service_role）处理。
