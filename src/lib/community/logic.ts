@@ -84,6 +84,9 @@ export function defaultNickname(rand: () => number): string {
 
 const len = (s: string) => Array.from(s).length;
 
+/** 不能用作昵称的词：防冒充官方。比较前去掉所有空白并做 NFKC（全角 → 半角）。 */
+const RESERVED_NICKNAME_WORDS = ["好好吃饭", "官方"];
+
 export function validateNickname(
   s: string,
 ): { ok: true; value: string } | { ok: false; error: string } {
@@ -91,6 +94,8 @@ export function validateNickname(
   if (!value) return { ok: false, error: "昵称不能为空" };
   if (len(value) > 20) return { ok: false, error: "昵称最多 20 个字" };
   if (value.includes("@")) return { ok: false, error: "昵称不能包含 @" };
+  const folded = value.normalize("NFKC").replace(/\s+/g, "").toLowerCase();
+  if (RESERVED_NICKNAME_WORDS.some((w) => folded.includes(w))) return { ok: false, error: "这个昵称不能用" };
   return { ok: true, value };
 }
 

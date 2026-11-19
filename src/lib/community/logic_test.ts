@@ -84,6 +84,14 @@ Deno.test("validateNickname", () => {
   assert(r.ok && r.value === "小王");
 });
 
+Deno.test("validateNickname: 不能冒充官方", () => {
+  for (const s of ["好好吃饭", "  好好吃饭  ", "好好 吃饭", "好好吃饭官方", "官方小助手", "ＯＫ官方"]) {
+    assertEquals(validateNickname(s).ok, false, s);
+  }
+  assert(validateNickname("好好做饭").ok);
+  assert(validateNickname("吃饭的人1234").ok);
+});
+
 Deno.test("validateCommentBody", () => {
   assertEquals(validateCommentBody(" \n "), { ok: false, error: "empty" });
   assertEquals(validateCommentBody("🍜".repeat(500)).ok, true);
