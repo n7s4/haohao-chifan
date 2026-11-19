@@ -94,12 +94,14 @@ export function validateNickname(
   return { ok: true, value };
 }
 
+export const COMMENT_MAX = 500;
+
 export function validateCommentBody(
   s: string,
 ): { ok: true; value: string } | { ok: false; error: "empty" | "too_long" } {
   const value = s.trim();
   if (!value) return { ok: false, error: "empty" };
-  if (len(value) > 500) return { ok: false, error: "too_long" };
+  if (len(value) > COMMENT_MAX) return { ok: false, error: "too_long" };
   return { ok: true, value };
 }
 
@@ -274,8 +276,6 @@ export function commentActions(
   if (!own) out.push("report");
   return out;
 }
-
-export const COMMENT_MAX = 500;
 
 /** 与 validateCommentBody 同一口径：trim 后按 Unicode 码点计。 */
 export function commentLength(s: string): number {

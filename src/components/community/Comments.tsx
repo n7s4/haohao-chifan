@@ -491,6 +491,7 @@ function Composer({
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alive = useRef(true);
   const length = commentLength(draft);
   const tooLong = length > COMMENT_MAX;
   const canSend = !sending && length > 0 && !tooLong;
@@ -498,17 +499,26 @@ function Composer({
   useEffect(() => {
     const show = Keyboard.addListener(IS_ANDROID ? "keyboardDidShow" : "keyboardWillShow", () => setKeyboardUp(true));
     const hide = Keyboard.addListener(IS_ANDROID ? "keyboardDidHide" : "keyboardWillHide", () => setKeyboardUp(false));
+    alive.current = true;
     return () => {
+      alive.current = false;
       show.remove();
       hide.remove();
       if (errorTimer.current) clearTimeout(errorTimer.current);
+      errorTimer.current = null;
     };
   }, []);
 
   const flash = (text: string) => {
+    if (!alive.current) return;
     if (errorTimer.current) clearTimeout(errorTimer.current);
     setError(text);
     errorTimer.current = setTimeout(() => setError(null), ERROR_HOLD_MS);
+  };
+
+  // 发送中不让收起：失败提示只显示在评论框里，收起了就看不到了。
+  const close = () => {
+    if (!sending) onClose();
   };
 
   const send = async () => {
@@ -517,10 +527,10 @@ function Composer({
   };
 
   return (
-    <Modal transparent animationType="none" visible onRequestClose={onClose}>
+    <Modal transparent animationType="none" visible onRequestClose={close}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={IS_ANDROID ? "height" : "padding"}>
         <Animated.View entering={backdropIn} style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="收起评论框" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="收起评论框" />
           {error ? (
             <Animated.View
               entering={FadeIn.duration(motion.duration.fast)}
