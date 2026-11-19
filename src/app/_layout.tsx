@@ -9,6 +9,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { colors } from "../theme";
 import { GuestMergePrompt } from "../components/GuestMergePrompt";
 import { notificationsSupported } from "../lib/cookNotify";
+import { CommunityProfileProvider } from "../lib/community/useCommunityProfile";
 import { StoreProvider } from "../state/store";
 
 function useCookNotificationRoutes() {
@@ -48,6 +49,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <StoreProvider>
+          <CommunityProfileProvider>
           <StatusBar style="dark" />
           <GuestMergePrompt />
           <Stack
@@ -68,6 +70,7 @@ export default function RootLayout() {
             <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
             <Stack.Screen name="account" />
           </Stack>
+          </CommunityProfileProvider>
         </StoreProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

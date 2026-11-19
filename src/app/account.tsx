@@ -41,6 +41,8 @@ import {
   replaceAvatar,
   type Avatar,
 } from "../lib/account";
+import { NicknameSheet } from "../components/community/NicknameSheet";
+import { failMessage, useCommunityProfile } from "../lib/community/useCommunityProfile";
 import { pickAvatarFromLibrary, takeAvatarPhoto } from "../lib/pickPhoto";
 import { useAuth } from "../lib/useAuth";
 import { colors, motion, radius, shadow, spacing } from "../theme";
@@ -70,6 +72,8 @@ export default function AccountScreen() {
   const [photoSheet, setPhotoSheet] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const [nicknameOpen, setNicknameOpen] = useState(false);
+  const community = useCommunityProfile();
 
   const name = displayNameFor(auth.email);
   const initial = name.slice(0, 1).toUpperCase();
@@ -101,6 +105,12 @@ export default function AccountScreen() {
     } finally {
       setAvatarBusy(false);
     }
+  };
+
+  const openNickname = async () => {
+    // 还没有公开资料时走 ensure（起名即建档）；已有则直接改名。
+    if (community.profile) setNicknameOpen(true);
+    else if (await community.ensure()) show({ text: "昵称已设置" });
   };
 
   const signOutAndSwitch = () => {
@@ -171,6 +181,13 @@ export default function AccountScreen() {
             onPress={() => setPhotoSheet(true)}
           />
           <Row
+            icon={<UserIcon size={19} color={colors.accentText} />}
+            tint={colors.accentSoft}
+            label="社区昵称"
+            sub={community.profile?.nickname ?? "还没起名，第一次评论或发布时再起"}
+            onPress={openNickname}
+          />
+          <Row
             icon={<LockIcon size={19} color={colors.ink} />}
             tint={colors.skySoft}
             label="修改密码"
@@ -231,6 +248,21 @@ export default function AccountScreen() {
             </Animated.View>
           </View>
         </Modal>
+      ) : null}
+
+      {nicknameOpen && community.profile ? (
+        <NicknameSheet
+          title="修改社区昵称"
+          initial={community.profile.nickname}
+          onCancel={() => setNicknameOpen(false)}
+          onConfirm={async (nickname) => {
+            const result = await community.rename(nickname);
+            if (!result.ok) return failMessage(result.reason);
+            setNicknameOpen(false);
+            show({ text: "昵称已更新" });
+            return null;
+          }}
+        />
       ) : null}
 
       {passwordOpen ? (
@@ -536,6 +568,15 @@ function PhotoIcon({ size = 18, color = colors.ink }: IconProps) {
       <Rect x={3.5} y={4.5} width={17} height={15} rx={3} stroke={color} strokeWidth={2} />
       <Circle cx={9} cy={9.5} r={1.6} fill={color} />
       <Path d="m4.5 17 4.5-4.5 3.5 3.5 2.5-2.5 4.5 4.5" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function UserIcon({ size = 18, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={8.5} r={3.8} stroke={color} strokeWidth={2} />
+      <Path d="M4.5 19.5c.8-3.4 3.8-5.2 7.5-5.2s6.7 1.8 7.5 5.2" stroke={color} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 }

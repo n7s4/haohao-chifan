@@ -380,6 +380,20 @@ export async function ensurePublicProfile(
   return fail(reasonOf(error, status));
 }
 
+/** 改昵称：只更新自己那条；没有资料行 → unavailable。 */
+export async function renamePublicProfile(
+  client: SupabaseClient,
+  userId: string,
+  nickname: string,
+): Promise<Result<void>> {
+  const v = validateNickname(nickname);
+  if (!v.ok) return fail("invalid");
+  const { error, status, count } = await client.from("public_profiles").update({ nickname: v.value }, { count: "exact" })
+    .eq("user_id", userId);
+  if (error) return fail(reasonOf(error, status));
+  return count ? okVoid : fail("unavailable");
+}
+
 /** 私有头像 → community-media/avatars/{userId}.jpg（upsert 覆盖）；null 时删掉公开头像并清空 avatar_path。 */
 export async function syncPublicAvatar(
   client: SupabaseClient,

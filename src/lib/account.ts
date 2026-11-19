@@ -6,6 +6,7 @@
  */
 import { avatarRef, removeAvatarFile, resolveAvatarUri, uploadMedia } from "./media";
 import { newImageId } from "./pickPhoto";
+import { getProfiles, syncPublicAvatar } from "./community/api";
 import { getSupabase } from "./supabase";
 
 export type Avatar = { path: string | null; uri: string | null };
@@ -70,7 +71,17 @@ export async function replaceAvatar(
   }
 
   if (previousPath && previousPath !== path) await removeAvatarFile(userId, previousPath);
+  // 已有公开资料才同步公开头像；失败只告警，不影响换头像本身。
+  void mirrorPublicAvatar(userId, path).catch((failure) => console.warn("[community] 公开头像同步失败", failure));
   return { path, uri: await resolveAvatarUri(userId, path) };
+}
+
+/** 有公开资料时把私有头像镜像到公开桶；没有公开资料（没发过言）就什么也不做。 */
+export async function mirrorPublicAvatar(userId: string, privatePath: string | null): Promise<void> {
+  const client = getSupabase();
+  const profiles = await getProfiles(client, [userId]);
+  if (!profiles.ok || !profiles.value.has(userId)) return;
+  await syncPublicAvatar(client, userId, privatePath);
 }
 
 /**
