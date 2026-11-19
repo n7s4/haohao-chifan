@@ -2,7 +2,7 @@
 begin;
 set local client_min_messages = warning;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(45);
 
 -- 测试用户：A（作者）、B、C
 insert into auth.users (id, instance_id, aud, role, email) values
@@ -28,7 +28,14 @@ select lives_ok($$insert into public.community_likes (user_id, community_recipe_
 select throws_ok($$insert into public.community_likes (user_id, community_recipe_id) values ('22222222-2222-4222-8222-222222222222', 'aaaaaaaa-0000-4000-8000-000000000011')$$,
   '23505', null, '重复点赞 → 主键冲突');
 select is((select like_count from public.community_recipes where id = 'aaaaaaaa-0000-4000-8000-000000000011'), 1, '点赞两次 like_count = 1');
-select is((select count(*)::int from public.community_likes where community_recipe_id = 'aaaaaaaa-0000-4000-8000-000000000011'), 1, '所有人可读点赞');
+select is((select count(*)::int from public.community_likes where community_recipe_id = 'aaaaaaaa-0000-4000-8000-000000000011'), 1, 'B 能读自己的赞');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"33333333-3333-4333-8333-333333333333","role":"authenticated"}';
+select is((select count(*)::int from public.community_likes), 0, 'C 看不到别人点了什么赞');
+set local role anon;
+select is((select count(*)::int from public.community_likes), 0, 'anon 看不到点赞记录');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated"}';
 select throws_ok($$insert into public.community_likes (user_id, community_recipe_id) values ('33333333-3333-4333-8333-333333333333', 'aaaaaaaa-0000-4000-8000-000000000013')$$,
   '42501', null, '不能替别人点赞');
 delete from public.community_likes where user_id = '22222222-2222-4222-8222-222222222222' and community_recipe_id = 'aaaaaaaa-0000-4000-8000-000000000011';

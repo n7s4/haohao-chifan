@@ -279,7 +279,7 @@ export async function setLike(
   const del = await likes.delete({ count: "exact" }).eq("user_id", userId).eq("community_recipe_id", communityId);
   if (del.error) return fail(reasonOf(del.error, del.status));
   if (del.count) return okVoid;
-  // 0 行：要么本来就没赞（成功），要么菜已撤回、RLS 不让删（unavailable）。点赞表所有人可读，查一下区分。
+  // 0 行：要么本来就没赞（成功），要么菜已撤回、RLS 不让删（unavailable）。本人能读自己的赞，查一下区分。
   const still = await likes.select("user_id").eq("user_id", userId).eq("community_recipe_id", communityId)
     .maybeSingle();
   if (still.error) return fail(reasonOf(still.error, still.status));

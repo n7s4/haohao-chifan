@@ -362,8 +362,10 @@ drop policy if exists community_likes_read_all on public.community_likes;
 drop policy if exists community_likes_insert_own on public.community_likes;
 drop policy if exists community_likes_delete_own on public.community_likes;
 
-create policy community_likes_read_all on public.community_likes
-  for select to anon, authenticated using (true);
+drop policy if exists community_likes_read_own on public.community_likes;
+-- 只能读自己的赞：谁赞了什么不公开，计数看 community_recipes.like_count。
+create policy community_likes_read_own on public.community_likes
+  for select to authenticated using (user_id = auth.uid());
 create policy community_likes_insert_own on public.community_likes
   for insert to authenticated
   with check (
