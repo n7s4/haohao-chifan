@@ -7,6 +7,7 @@ import {
   commentLength,
   commentTime,
   likeAfterLookup,
+  type CommunityRecipe,
   mergeFavoriteEntries,
   mergeFeedPage,
   type CommentRow,
@@ -26,7 +27,6 @@ import {
   validateNickname,
 } from "./logic.ts";
 import type { Recipe } from "../../data/recipes.ts";
-import type { CommunityRecipe } from "./logic.ts";
 
 const recipe: Recipe = {
   id: "r1",
@@ -313,7 +313,7 @@ Deno.test("mergeFavoriteEntries: 保持收藏顺序，本地菜和社区菜混�
   const out = mergeFavoriteEntries(
     ["b1", "community:u1", "gone", "community:u2"],
     new Set(["b1", "gone"]),
-    { state: "ok", rows: [cr] },
+    { state: "ok", rows: [cr], requested: ["u1", "u2"] },
   );
   assertEquals(out, [
     { kind: "local", id: "b1" },
@@ -324,7 +324,7 @@ Deno.test("mergeFavoriteEntries: 保持收藏顺序，本地菜和社区菜混�
 });
 
 Deno.test("mergeFavoriteEntries: 本地查不到的收藏跳过（和原来一致）", () => {
-  const out = mergeFavoriteEntries(["x", "y"], new Set(["y"]), { state: "ok", rows: [] });
+  const out = mergeFavoriteEntries(["x", "y"], new Set(["y"]), { state: "ok", rows: [], requested: [] });
   assertEquals(out, [{ kind: "local", id: "y" }]);
 });
 
@@ -341,4 +341,9 @@ Deno.test("mergeFavoriteEntries: 加载中显示未加载占位，不算已下�
 Deno.test("mergeFavoriteEntries: 重复的社区收藏只出现一次", () => {
   const out = mergeFavoriteEntries(["community:u1", "community:u1"], new Set(), { state: "failed" });
   assertEquals(out.length, 1);
+});
+
+Deno.test("mergeFavoriteEntries: 上次没请求过的新收藏按加载中处理，不算已下架", () => {
+  const out = mergeFavoriteEntries(["community:new"], new Set(), { state: "ok", rows: [], requested: ["old"] });
+  assertEquals(out, [{ kind: "unloaded", favId: "community:new", failed: false }]);
 });

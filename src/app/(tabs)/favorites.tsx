@@ -73,7 +73,7 @@ export default function FavoritesScreen() {
     [favorites]
   );
   const idsKey = communityIds.join(",");
-  const [community, setCommunity] = useState<CommunityFetch>({ state: "ok", rows: [] });
+  const [community, setCommunity] = useState<CommunityFetch>({ state: "ok", rows: [], requested: [] });
   const [retryTick, setRetryTick] = useState(0);
   const [coverFailed, setCoverFailed] = useState<Record<string, boolean>>({});
   const generation = useRef(0);
@@ -82,7 +82,7 @@ export default function FavoritesScreen() {
       void retryTick;
       const gen = ++generation.current;
       if (!idsKey) {
-        setCommunity({ state: "ok", rows: [] });
+        setCommunity({ state: "ok", rows: [], requested: [] });
         return;
       }
       // 已经有结果时保持原样等新结果，避免取消收藏一条就把其余卡片闪成占位。
@@ -90,8 +90,9 @@ export default function FavoritesScreen() {
       (async () => {
         let next: CommunityFetch;
         try {
-          const res = await getCommunityRecipes(getSupabase(), idsKey.split(","));
-          next = res.ok ? { state: "ok", rows: res.value } : { state: "failed" };
+          const requested = idsKey.split(",");
+          const res = await getCommunityRecipes(getSupabase(), requested);
+          next = res.ok ? { state: "ok", rows: res.value, requested } : { state: "failed" };
         } catch {
           next = { state: "failed" };
         }
@@ -287,7 +288,7 @@ export default function FavoritesScreen() {
                     {label}
                   </AppText>
                   <AppText size={12} weight="700" color={on ? "rgba(255,255,255,0.7)" : colors.placeholder}>
-                    {fn === filters[0][2] ? totalCount : saved.filter(fn).length}
+                    {key === "all" ? totalCount : saved.filter(fn).length}
                   </AppText>
                 </Pressable>
               );

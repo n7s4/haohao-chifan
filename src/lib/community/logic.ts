@@ -324,11 +324,11 @@ export type FavoriteEntry =
   | { kind: "removed"; favId: string }
   | { kind: "unloaded"; favId: string; failed: boolean };
 
-export type CommunityFetch = { state: "loading" } | { state: "failed" } | { state: "ok"; rows: CommunityRecipe[] };
+export type CommunityFetch = { state: "loading" } | { state: "failed" } | { state: "ok"; rows: CommunityRecipe[]; requested: string[] };
 
 /**
  * 收藏页：按收藏顺序把本地菜和社区菜合在一起。本地查不到的收藏跳过（和原来一致）。
- * 社区菜只有拉取成功却没返回时才算「已下架」；加载中 / 拉取失败是中性的「未加载」，绝不当成下架。
+ * 社区菜只有「请求过这个 id、拉取成功却没返回」时才算「已下架」；加载中 / 拉取失败是中性的「未加载」，绝不当成下架。
  */
 export function mergeFavoriteEntries(
   favorites: string[],
@@ -336,6 +336,7 @@ export function mergeFavoriteEntries(
   community: CommunityFetch,
 ): FavoriteEntry[] {
   const byId = new Map<string, CommunityRecipe>();
+  const requested = new Set(community.state === "ok" ? community.requested : []);
   if (community.state === "ok") for (const cr of community.rows) byId.set(cr.id, cr);
   const seen = new Set<string>();
   const out: FavoriteEntry[] = [];
@@ -349,7 +350,7 @@ export function mergeFavoriteEntries(
     seen.add(fav);
     const cr = byId.get(cid);
     if (cr) out.push({ kind: "community", favId: fav, cr });
-    else if (community.state === "ok") out.push({ kind: "removed", favId: fav });
+    else if (community.state === "ok" && requested.has(cid)) out.push({ kind: "removed", favId: fav });
     else out.push({ kind: "unloaded", favId: fav, failed: community.state === "failed" });
   }
   return out;
