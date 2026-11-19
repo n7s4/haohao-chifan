@@ -8,6 +8,7 @@ import Animated, {
   FadeInDown,
   FadeInLeft,
   FadeInRight,
+  SlideInDown,
   ZoomIn,
   cancelAnimation,
   useAnimatedStyle,
@@ -38,6 +39,11 @@ import { Toast, useToast } from "../../components/Toast";
 import { MealSlot, mealSlots, recipeCalories, recipeMinutes } from "../../data/recipes";
 import { PlanMap, addDays, parseKey, startOfWeek, toKey, useStore } from "../../state/store";
 import { colors, motion, radius, shadow, spacing } from "../../theme";
+
+// 底部抽屉：蒙层淡入 + 卡片 ease-out 滑上来，与 account / GuestMergePrompt 一致。
+// 不用 springify().damping(n)：Reanimated 4 默认 mass 4 / stiffness 900，只改 damping 会严重欠阻尼，opacity 来回过冲导致闪烁。
+const backdropIn = FadeIn.duration(motion.duration.base);
+const sheetIn = SlideInDown.duration(motion.duration.slow).easing(Easing.bezier(0.22, 1, 0.36, 1));
 
 const weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"];
 const weekdayOf = (key: string) => `周${weekdayLabels[(parseKey(key).getDay() + 6) % 7]}`;
@@ -676,9 +682,9 @@ export default function PlanScreen() {
       <Toast toast={toast} bottom={spacing.lg} onUndo={undo} />
 
       {rowActions ? (
-        <View style={styles.sheetBackdrop}>
+        <Animated.View entering={backdropIn} style={styles.sheetBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setRowActions(null)} accessibilityLabel="关闭餐次操作" />
-          <Animated.View entering={FadeInDown.springify().damping(18)} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <Animated.View entering={sheetIn} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.sheetHandle} />
             <AppText size={18} weight="800">
               {recipeFor(view[rowActions.dateKey] ?? {}, rowActions.slot)?.name ?? rowActions.slot}
@@ -700,13 +706,13 @@ export default function PlanScreen() {
               <AppText size={15} weight="700" color={colors.muted}>取消</AppText>
             </Pressable>
           </Animated.View>
-        </View>
+        </Animated.View>
       ) : null}
 
       {slotMenu ? (
-        <View style={styles.sheetBackdrop}>
+        <Animated.View entering={backdropIn} style={styles.sheetBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSlotMenu(null)} accessibilityLabel="关闭餐次菜单" />
-          <Animated.View entering={FadeInDown.springify().damping(18)} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <Animated.View entering={sheetIn} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.sheetHandle} />
             <AppText size={18} weight="800" style={{ marginBottom: spacing.md }}>移到</AppText>
             {mealSlots.map((target) => {
@@ -733,13 +739,13 @@ export default function PlanScreen() {
               );
             })}
           </Animated.View>
-        </View>
+        </Animated.View>
       ) : null}
 
       {sheet ? (
-        <View style={styles.sheetBackdrop}>
+        <Animated.View entering={backdropIn} style={styles.sheetBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSheet(null)} accessibilityLabel="关闭选择器" />
-          <Animated.View entering={FadeInDown.springify().damping(18)} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <Animated.View entering={sheetIn} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.sheetHandle} />
             <AppText size={18} weight="800">挑一道{sheet.slot}</AppText>
             <AppText size={12} color={colors.muted} style={{ marginTop: 3, marginBottom: spacing.md }}>
@@ -792,7 +798,7 @@ export default function PlanScreen() {
               </Pressable>
             ) : null}
           </Animated.View>
-        </View>
+        </Animated.View>
       ) : null}
 
       {confirm ? (
