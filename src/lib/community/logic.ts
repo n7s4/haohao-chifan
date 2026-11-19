@@ -167,6 +167,16 @@ export function fromSnapshot(
   };
 }
 
+/** 点赞的乐观更新：next 立刻显示，请求失败时回到 rollback。计数不会变成负数。 */
+export function applyLikeToggle(state: { liked: boolean; count: number }): {
+  next: { liked: boolean; count: number };
+  rollback: { liked: boolean; count: number };
+} {
+  const liked = !state.liked;
+  const count = liked ? state.count + 1 : Math.max(0, state.count - 1);
+  return { next: { liked, count }, rollback: { ...state } };
+}
+
 export type CommentRow = {
   id: string;
   parentId: string | null;

@@ -1,5 +1,6 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 import {
+  applyLikeToggle,
   type CommentRow,
   communityFavoriteId,
   defaultNickname,
@@ -140,4 +141,16 @@ Deno.test("threadComments", () => {
   const t = threadComments(rows);
   assertEquals(t.map((x) => x.comment.id), ["e", "d", "a"]);
   assertEquals(t[1].replies.map((r) => r.id), ["d1", "d2"]);
+});
+
+Deno.test("applyLikeToggle", () => {
+  assertEquals(applyLikeToggle({ liked: false, count: 3 }), {
+    next: { liked: true, count: 4 },
+    rollback: { liked: false, count: 3 },
+  });
+  assertEquals(applyLikeToggle({ liked: true, count: 0 }), {
+    next: { liked: false, count: 0 },
+    rollback: { liked: true, count: 0 },
+  });
+  assertEquals(applyLikeToggle({ liked: true, count: 5 }).next, { liked: false, count: 4 });
 });
