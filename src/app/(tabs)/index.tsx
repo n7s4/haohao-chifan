@@ -154,25 +154,25 @@ export default function DiscoverScreen() {
   const heroFav = heroRecipe ? favorites.includes(heroRecipe.id) : false;
 
   const helloBlock = (
-        <Animated.View entering={rise(0)} style={[styles.hello, { paddingTop: insets.top + spacing.md }]}>
-          <View style={{ flex: 1 }}>
-            <AppText size={12} weight="700" color={colors.muted} style={styles.eyebrow}>
-              {`${now.getMonth() + 1} 月 ${now.getDate()} 日 · ${WEEKDAYS[now.getDay()]}`}
-            </AppText>
-            <AppText size={28} weight="800" style={styles.helloTitle}>
-              {`${hello.hi}，\n${hello.ask}`}
-              <AppText size={28} weight="800" color={colors.accentText}>{hello.em}</AppText>？
-            </AppText>
-          </View>
-          <Pressable
-            onPress={() => router.navigate("/profile")}
-            style={styles.avatar}
-            accessibilityRole="button"
-            accessibilityLabel="我的"
-          >
-            <AppText size={17} weight="800">饭</AppText>
-          </Pressable>
-        </Animated.View>
+    <Animated.View entering={rise(0)} style={[styles.hello, { paddingTop: insets.top + spacing.md }]}>
+      <View style={{ flex: 1 }}>
+        <AppText size={12} weight="700" color={colors.muted} style={styles.eyebrow}>
+          {`${now.getMonth() + 1} 月 ${now.getDate()} 日 · ${WEEKDAYS[now.getDay()]}`}
+        </AppText>
+        <AppText size={28} weight="800" style={styles.helloTitle}>
+          {`${hello.hi}，\n${hello.ask}`}
+          <AppText size={28} weight="800" color={colors.accentText}>{hello.em}</AppText>？
+        </AppText>
+      </View>
+      <Pressable
+        onPress={() => router.navigate("/profile")}
+        style={styles.avatar}
+        accessibilityRole="button"
+        accessibilityLabel="我的"
+      >
+        <AppText size={17} weight="800">饭</AppText>
+      </Pressable>
+    </Animated.View>
   );
 
   const modeTabs = (

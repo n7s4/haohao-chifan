@@ -43,6 +43,8 @@ export function CommunityFeed({ header, bottomPad = 0 }: { header?: React.ReactN
   const [coverFailed, setCoverFailed] = useState<Record<string, boolean>>({});
   // 切换排序 / 下拉刷新后，旧请求的结果要丢掉。
   const generation = useRef(0);
+  // 服务端偏移量：按原始返回行数推进，不能用去重后的 items.length。
+  const offset = useRef(0);
   const busy = useRef(false);
 
   const fetchPage = useCallback(async (sortBy: Sort, offset: number) => {
@@ -60,6 +62,7 @@ export function CommunityFeed({ header, bottomPad = 0 }: { header?: React.ReactN
       if (!keepOnError) setStatus("error");
       return;
     }
+    offset.current = r.value.length;
     setItems(r.value);
     setHasMore(r.value.length >= PAGE_SIZE);
     setStatus("ready");
@@ -86,8 +89,9 @@ export function CommunityFeed({ header, bottomPad = 0 }: { header?: React.ReactN
     fetchPage("latest", 0).then((r) => {
       if (gen === generation.current) apply(r, false);
     });
+    const g = generation;
     return () => {
-      generation.current++;
+      g.current++;
     };
   }, [fetchPage, apply]);
 
@@ -103,7 +107,7 @@ export function CommunityFeed({ header, bottomPad = 0 }: { header?: React.ReactN
     setLoadingMore(true);
     setMoreFailed(false);
     const gen = generation.current;
-    const r = await fetchPage(sort, items.length);
+    const r = await fetchPage(sort, offset.current);
     if (gen !== generation.current) return;
     busy.current = false;
     setLoadingMore(false);
@@ -111,6 +115,7 @@ export function CommunityFeed({ header, bottomPad = 0 }: { header?: React.ReactN
       setMoreFailed(true);
       return;
     }
+    offset.current += r.value.length;
     const merged = mergeFeedPage(items, r.value, PAGE_SIZE);
     setItems(merged.items);
     setHasMore(merged.hasMore);
