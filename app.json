@@ -21,7 +21,7 @@
       },
       "predictiveBackGestureEnabled": true,
       "permissions": [
-        "SCHEDULE_EXACT_ALARM"
+        "android.permission.SCHEDULE_EXACT_ALARM"
       ]
     },
     "web": {
@@ -63,6 +63,12 @@
         "projectId": "374b111b-9b55-4d87-9509-efbde6d019d7"
       }
     },
-    "owner": "ethanwen"
+    "owner": "ethanwen",
+    "updates": {
+      "url": "https://u.expo.dev/374b111b-9b55-4d87-9509-efbde6d019d7"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    }
   }
 }
