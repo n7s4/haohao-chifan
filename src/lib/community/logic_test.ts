@@ -1,0 +1,143 @@
+import { assert, assertEquals } from "jsr:@std/assert";
+import {
+  type CommentRow,
+  communityFavoriteId,
+  defaultNickname,
+  favoriteIdFor,
+  fromSnapshot,
+  missingUploads,
+  parseCommunityFavoriteId,
+  planPool,
+  threadComments,
+  toSnapshot,
+  validateCommentBody,
+  validateNickname,
+} from "./logic.ts";
+import type { Recipe } from "../../data/recipes.ts";
+
+const recipe: Recipe = {
+  id: "r1",
+  name: "番茄蛋",
+  subtitle: "s",
+  description: "d",
+  minutes: 10,
+  difficulty: "简单",
+  calories: 100,
+  tags: ["蛋"],
+  cover: { id: "c1", path: "u1/r1/c1.jpg", width: 10, height: 10, localUri: "file:///x" },
+  ingredients: [
+    { name: "番茄", qty: 1, unit: "个" },
+    { name: "盐", qty: null, unit: "适量", section: "seasoning" },
+  ],
+  steps: [
+    { text: "切", images: [{ id: "i1", path: "u1/r1/i1.jpg", localUri: "file:///y" }] },
+    { text: "炒", images: [{ id: "i2", path: "u1/r1/i2.jpg" }, { id: "i3", path: "u1/r1/i3.jpg" }] },
+  ],
+  custom: true,
+  updatedAt: "2026-01-01",
+};
+
+Deno.test("favorite ids", () => {
+  assertEquals(communityFavoriteId("abc"), "community:abc");
+  assertEquals(parseCommunityFavoriteId("community:abc"), "abc");
+  assertEquals(parseCommunityFavoriteId("tomato-pasta"), null);
+});
+
+Deno.test("favoriteIdFor", () => {
+  const base = { id: "uuid-1", authorId: "u1", sourceRecipeId: "priv-1", builtin: false };
+  assertEquals(favoriteIdFor({ ...base, builtin: true, authorId: null, sourceRecipeId: "tomato-pasta" }, "u1"), "tomato-pasta");
+  assertEquals(favoriteIdFor(base, "u1"), "priv-1");
+  assertEquals(favoriteIdFor(base, "u2"), "community:uuid-1");
+  assertEquals(favoriteIdFor(base, null), "community:uuid-1");
+});
+
+Deno.test("planPool", () => {
+  assertEquals(planPool(["a", "community:x"], ["a", "b"]), ["a"]);
+  assertEquals(planPool(["community:x"], ["a", "b"]), ["a", "b"]);
+});
+
+Deno.test("defaultNickname", () => {
+  assert(/^吃饭的人\d{4}$/.test(defaultNickname(() => 0.0421)));
+  assertEquals(defaultNickname(() => 0.0421), "吃饭的人0421");
+  assertEquals(defaultNickname(() => 0.9999999), "吃饭的人9999");
+});
+
+Deno.test("validateNickname", () => {
+  assertEquals(validateNickname("me@qq.com").ok, false);
+  assertEquals(validateNickname("   ").ok, false);
+  assertEquals(validateNickname("a".repeat(21)).ok, false);
+  assertEquals(validateNickname("🍜".repeat(20)).ok, true);
+  const r = validateNickname("  小王  ");
+  assert(r.ok && r.value === "小王");
+});
+
+Deno.test("validateCommentBody", () => {
+  assertEquals(validateCommentBody(" \n "), { ok: false, error: "empty" });
+  assertEquals(validateCommentBody("🍜".repeat(500)).ok, true);
+  assertEquals(validateCommentBody("a".repeat(501)), { ok: false, error: "too_long" });
+  assertEquals(validateCommentBody(" hi "), { ok: true, value: "hi" });
+});
+
+Deno.test("missingUploads", () => {
+  assertEquals(missingUploads(recipe), 0);
+  assertEquals(
+    missingUploads({
+      cover: { id: "c1", path: "p" },
+      steps: [{ text: "a", images: [{ id: "x", path: "p" }, { id: "y" }] }, { text: "b" }],
+    }),
+    1,
+  );
+  assertEquals(missingUploads({ steps: [{ text: "a", images: [{ id: "y" }] }] }), 1);
+});
+
+Deno.test("toSnapshot", () => {
+  const { row, copies } = toSnapshot(recipe, "cid");
+  assert(!JSON.stringify(row).includes("localUri"));
+  assertEquals(row.id, "cid");
+  assertEquals(row.source_recipe_id, "r1");
+  assertEquals(row.step_minutes, []);
+  assertEquals(copies.length, 4);
+  assertEquals(copies[0], { from: "u1/r1/c1.jpg", to: "cid/c1.jpg" });
+  assertEquals((row.cover as { path: string }).path, "cid/c1.jpg");
+  assertEquals((row.steps as Recipe["steps"])[1].images?.[1].path, "cid/i3.jpg");
+  assertEquals(recipe.cover?.path, "u1/r1/c1.jpg"); // 不改入参
+});
+
+Deno.test("fromSnapshot", () => {
+  const { row } = toSnapshot(recipe, "cid");
+  const cr = {
+    id: "cid", authorId: "u1", sourceRecipeId: "r1", builtin: false, status: "published" as const,
+    likeCount: 0, commentCount: 0, publishedAt: null,
+    recipe: {
+      name: "番茄蛋", subtitle: "s", description: "d", minutes: 10, difficulty: "简单", calories: 100,
+      tags: ["蛋"], cover: row.cover as Recipe["cover"],
+      ingredients: row.ingredients as Recipe["ingredients"], steps: row.steps as Recipe["steps"],
+    },
+  };
+  const out = fromSnapshot(cr, "u2", "new1", "小王");
+  assertEquals(out.origin, { communityId: "cid", authorNickname: "小王" });
+  assertEquals(out.input.ingredients.map((i) => i.name), ["番茄"]);
+  assertEquals(out.input.seasonings?.map((i) => i.name), ["盐"]);
+  assertEquals(out.input.cover?.path, "u2/new1/c1.jpg");
+  assertEquals(out.input.steps[0].images?.[0].path, "u2/new1/i1.jpg");
+  assertEquals(out.copies.length, 4);
+  assertEquals(out.copies[0], { from: "cid/c1.jpg", to: "u2/new1/c1.jpg" });
+});
+
+Deno.test("threadComments", () => {
+  const c = (id: string, parentId: string | null, createdAt: string, deleted = false): CommentRow => ({
+    id, parentId, userId: "u", body: id, deleted, createdAt,
+  });
+  const rows = [
+    c("a", null, "2026-01-01"),
+    c("b", null, "2026-01-02", true), // 已删无回复 -> 丢
+    c("d", null, "2026-01-03", true), // 已删有回复 -> 留
+    c("d2", "d", "2026-01-05"),
+    c("d1", "d", "2026-01-04"),
+    c("d3", "d", "2026-01-06", true), // 已删回复 -> 丢
+    c("e", null, "2026-01-07"),
+  ];
+  const t = threadComments(rows);
+  assertEquals(t.map((x) => x.comment.id), ["e", "d", "a"]);
+  assertEquals(t[1].replies.map((r) => r.id), ["d1", "d2"]);
+});
