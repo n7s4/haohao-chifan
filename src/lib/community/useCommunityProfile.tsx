@@ -4,6 +4,7 @@ import { NicknameSheet } from "../../components/community/NicknameSheet";
 import { loadAvatar, mirrorPublicAvatar } from "../account";
 import { getSupabase } from "../supabase";
 import { useAuth } from "../useAuth";
+import { validateNickname } from "./logic";
 import { ensurePublicProfile, getProfiles, renamePublicProfile, type FailReason, type Result } from "./api";
 
 export type CommunityProfile = { nickname: string };
@@ -13,12 +14,18 @@ type Ctx = {
   /** 有公开资料 → true；没有则弹昵称弹层：确认 true，取消 false；未登录直接 false（调用方去登录）。 */
   ensure: () => Promise<boolean>;
   rename: (nickname: string) => Promise<Result<void>>;
+  /** 上次读取自己的资料失败了（此时 profile 为 null 不代表没起过名）。 */
+  loadFailed: boolean;
+  /** 重新读取：返回资料 / null（确认没有）/ "error"（读取失败）。 */
+  reload: () => Promise<CommunityProfile | null | "error">;
 };
 
 const CommunityProfileContext = createContext<Ctx>({
   profile: null,
   ensure: async () => false,
   rename: async () => ({ ok: false, reason: "auth" }),
+  loadFailed: false,
+  reload: async () => "error",
 });
 
 export const useCommunityProfile = () => useContext(CommunityProfileContext);
@@ -33,9 +40,12 @@ export function CommunityProfileProvider({ children }: { children: React.ReactNo
   const [askingFor, setAskingFor] = useState<string | null>(null);
   const profile = owned && owned.userId === userId ? owned.profile : null;
   const asking = askingFor !== null && askingFor === userId;
+  const [failedFor, setFailedFor] = useState<string | null>(null);
+  const loadFailed = failedFor !== null && failedFor === userId;
   const userRef = useRef<string | null>(null);
   const profileRef = useRef<CommunityProfile | null>(null);
   const loadRef = useRef<Promise<void>>(Promise.resolve());
+  const failedRef = useRef(false);
   const pendingRef = useRef<((ok: boolean) => void) | null>(null);
 
   const settle = useCallback((ok: boolean) => {
@@ -49,10 +59,35 @@ export function CommunityProfileProvider({ children }: { children: React.ReactNo
     setOwned({ userId: uid, profile: next });
   }, []);
 
+  const load = useCallback(async (uid: string): Promise<CommunityProfile | null | "error"> => {
+    const r = await getProfiles(getSupabase(), [uid]).catch(() => null);
+    if (userRef.current !== uid) return "error";
+    if (!r || !r.ok) {
+      failedRef.current = true;
+      setFailedFor(uid);
+      return "error";
+    }
+    failedRef.current = false;
+    setFailedFor(null);
+    const mine = r.value.get(uid);
+    if (!mine) return null;
+    const next = { nickname: mine.nickname };
+    apply(uid, next);
+    return next;
+  }, [apply]);
+
+  const reload = useCallback(async () => {
+    const uid = userRef.current;
+    if (!uid) return "error" as const;
+    const result = await load(uid);
+    return result;
+  }, [load]);
+
   // 每个登录用户只加载一次；登出 / 换账号时清空，并放弃还在等的 ensure()。
   useEffect(() => {
     userRef.current = userId;
     profileRef.current = null;
+    failedRef.current = false;
     // 放弃还在等的 ensure()；asking 由 userId 派生，不需要在这里 setState。
     pendingRef.current?.(false);
     pendingRef.current = null;
@@ -60,14 +95,9 @@ export function CommunityProfileProvider({ children }: { children: React.ReactNo
       loadRef.current = Promise.resolve();
       return;
     }
-    loadRef.current = getProfiles(getSupabase(), [userId])
-      .then((r) => {
-        if (userRef.current !== userId || !r.ok) return;
-        const mine = r.value.get(userId);
-        if (mine) apply(userId, { nickname: mine.nickname });
-      })
-      .catch(() => {});
-  }, [userId, apply]);
+    // 放到微任务里：load 会 setState，不能在 effect 体内同步调用。
+    loadRef.current = Promise.resolve().then(() => load(userId)).then(() => {});
+  }, [userId, load]);
 
   const ensure = useCallback(async () => {
     const uid = userRef.current;
@@ -75,18 +105,23 @@ export function CommunityProfileProvider({ children }: { children: React.ReactNo
     await loadRef.current;
     if (userRef.current !== uid) return false;
     if (profileRef.current) return true;
+    // 上次读取失败：先重试，仍失败就不能当作「没起过名」去建档。
+    if (failedRef.current && (await load(uid)) === "error") return false;
+    if (userRef.current !== uid) return false;
+    if (profileRef.current) return true;
     settle(false); // 同时只留一个弹层
     return new Promise<boolean>((resolve) => {
       pendingRef.current = resolve;
       setAskingFor(uid);
     });
-  }, [settle]);
+  }, [settle, load]);
 
   const rename = useCallback(async (nickname: string): Promise<Result<void>> => {
     const uid = userRef.current;
     if (!uid) return { ok: false, reason: "auth" };
+    const valid = validateNickname(nickname);
     const r = await renamePublicProfile(getSupabase(), uid, nickname);
-    if (r.ok && userRef.current === uid) apply(uid, { nickname: nickname.trim() });
+    if (r.ok && userRef.current === uid) apply(uid, { nickname: valid.ok ? valid.value : nickname });
     return r;
   }, [apply]);
 
@@ -109,7 +144,10 @@ export function CommunityProfileProvider({ children }: { children: React.ReactNo
     return null;
   }, [apply, settle]);
 
-  const value = useMemo(() => ({ profile, ensure, rename }), [profile, ensure, rename]);
+  const value = useMemo(
+    () => ({ profile, ensure, rename, loadFailed, reload }),
+    [profile, ensure, rename, loadFailed, reload],
+  );
 
   return (
     <CommunityProfileContext.Provider value={value}>

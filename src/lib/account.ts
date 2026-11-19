@@ -80,8 +80,13 @@ export async function replaceAvatar(
 export async function mirrorPublicAvatar(userId: string, privatePath: string | null): Promise<void> {
   const client = getSupabase();
   const profiles = await getProfiles(client, [userId]);
-  if (!profiles.ok || !profiles.value.has(userId)) return;
-  await syncPublicAvatar(client, userId, privatePath);
+  if (!profiles.ok) {
+    console.warn("[community] 公开头像同步失败：读取公开资料", profiles.reason);
+    return;
+  }
+  if (!profiles.value.has(userId)) return;
+  const synced = await syncPublicAvatar(client, userId, privatePath);
+  if (!synced.ok) console.warn("[community] 公开头像同步失败", synced.reason);
 }
 
 /**

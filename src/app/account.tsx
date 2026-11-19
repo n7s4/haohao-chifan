@@ -109,8 +109,23 @@ export default function AccountScreen() {
 
   const openNickname = async () => {
     // 还没有公开资料时走 ensure（起名即建档）；已有则直接改名。
-    if (community.profile) setNicknameOpen(true);
-    else if (await community.ensure()) show({ text: "昵称已设置" });
+    if (community.profile) {
+      setNicknameOpen(true);
+      return;
+    }
+    // 读取失败时先重试，不能把「读不到」当成「没起过名」。
+    if (community.loadFailed) {
+      const loaded = await community.reload();
+      if (loaded === "error") {
+        show({ text: "读取昵称失败，稍后再试" });
+        return;
+      }
+      if (loaded) {
+        setNicknameOpen(true);
+        return;
+      }
+    }
+    if (await community.ensure()) show({ text: "昵称已设置" });
   };
 
   const signOutAndSwitch = () => {
@@ -184,7 +199,10 @@ export default function AccountScreen() {
             icon={<UserIcon size={19} color={colors.accentText} />}
             tint={colors.accentSoft}
             label="社区昵称"
-            sub={community.profile?.nickname ?? "还没起名，第一次评论或发布时再起"}
+            sub={
+              community.profile?.nickname ??
+              (community.loadFailed ? "读取失败，点一下重试" : "还没起名，第一次评论或发布时再起")
+            }
             onPress={openNickname}
           />
           <Row

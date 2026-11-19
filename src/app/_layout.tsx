@@ -50,26 +50,26 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StoreProvider>
           <CommunityProfileProvider>
-          <StatusBar style="dark" />
-          <GuestMergePrompt />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.canvas },
-              animation: "slide_from_right",
-            }}
-          >
-            <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
-            <Stack.Screen name="recipe/[id]" />
-            <Stack.Screen
-              name="cook/[id]"
-              options={{ presentation: "fullScreenModal", animation: "slide_from_bottom", gestureEnabled: false }}
-            />
-            <Stack.Screen name="shopping-list" options={{ presentation: "modal" }} />
-            <Stack.Screen name="sign-in" options={{ presentation: "modal" }} />
-            <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
-            <Stack.Screen name="account" />
-          </Stack>
+            <StatusBar style="dark" />
+            <GuestMergePrompt />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.canvas },
+                animation: "slide_from_right",
+              }}
+            >
+              <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
+              <Stack.Screen name="recipe/[id]" />
+              <Stack.Screen
+                name="cook/[id]"
+                options={{ presentation: "fullScreenModal", animation: "slide_from_bottom", gestureEnabled: false }}
+              />
+              <Stack.Screen name="shopping-list" options={{ presentation: "modal" }} />
+              <Stack.Screen name="sign-in" options={{ presentation: "modal" }} />
+              <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
+              <Stack.Screen name="account" />
+            </Stack>
           </CommunityProfileProvider>
         </StoreProvider>
       </SafeAreaProvider>
