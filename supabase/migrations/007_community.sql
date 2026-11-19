@@ -281,3 +281,246 @@ on conflict (id) do update set
   tips = excluded.tips,
   step_minutes = excluded.step_minutes,
   cover = excluded.cover;
+
+-- ================================================================= 后半：互动
+-- 计数触发器都是 security definer：以 owner 身份更新 like_count / comment_count，
+-- 越过 community_recipes_guard（它只约束 anon / authenticated）。
+
+-- ---------------------------------------------------------- community_likes
+create table if not exists public.community_likes (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  community_recipe_id uuid not null references public.community_recipes (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, community_recipe_id)
+);
+create index if not exists community_likes_recipe_idx
+  on public.community_likes (community_recipe_id);
+
+alter table public.community_likes enable row level security;
+
+drop policy if exists community_likes_read_all on public.community_likes;
+drop policy if exists community_likes_insert_own on public.community_likes;
+drop policy if exists community_likes_delete_own on public.community_likes;
+
+create policy community_likes_read_all on public.community_likes
+  for select to anon, authenticated using (true);
+create policy community_likes_insert_own on public.community_likes
+  for insert to authenticated
+  with check (
+    user_id = auth.uid()
+    and exists (select 1 from public.community_recipes c
+                where c.id = community_recipe_id and c.status = 'published')
+  );
+create policy community_likes_delete_own on public.community_likes
+  for delete to authenticated
+  using (
+    user_id = auth.uid()
+    and exists (select 1 from public.community_recipes c
+                where c.id = community_recipe_id and c.status = 'published')
+  );
+
+create or replace function public.community_likes_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.community_recipes
+       set like_count = like_count + 1
+     where id = new.community_recipe_id;
+    return new;
+  else
+    update public.community_recipes
+       set like_count = greatest(like_count - 1, 0)
+     where id = old.community_recipe_id;
+    return old;
+  end if;
+end $$;
+
+revoke all on function public.community_likes_count() from public, anon, authenticated;
+
+drop trigger if exists community_likes_count on public.community_likes;
+create trigger community_likes_count
+  after insert or delete on public.community_likes
+  for each row execute function public.community_likes_count();
+
+-- ------------------------------------------------------- community_comments
+create table if not exists public.community_comments (
+  id uuid primary key default gen_random_uuid(),
+  community_recipe_id uuid not null references public.community_recipes (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  parent_id uuid references public.community_comments (id) on delete cascade,
+  body text not null,
+  deleted boolean not null default false,
+  hidden boolean not null default false,
+  created_at timestamptz not null default now(),
+  -- char_length 按 Unicode 码点计；删除后 body 为空串，不再校验长度
+  constraint community_comments_body_len
+    check (deleted or char_length(btrim(body)) between 1 and 500)
+);
+create index if not exists community_comments_recipe_idx
+  on public.community_comments (community_recipe_id, created_at);
+create index if not exists community_comments_parent_idx
+  on public.community_comments (parent_id) where parent_id is not null;
+
+alter table public.community_comments enable row level security;
+
+-- select 策略要看父评论是否 hidden；直接在策略里查本表会触发 RLS 递归，
+-- 所以放进 security definer 函数。
+create or replace function public.community_comment_visible(p_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (select 1 from public.community_comments where id = p_id and hidden = false)
+$$;
+
+revoke all on function public.community_comment_visible(uuid) from public;
+grant execute on function public.community_comment_visible(uuid) to anon, authenticated;
+
+drop policy if exists community_comments_read on public.community_comments;
+drop policy if exists community_comments_insert_own on public.community_comments;
+drop policy if exists community_comments_delete on public.community_comments;
+
+create policy community_comments_read on public.community_comments
+  for select to anon, authenticated
+  using (
+    hidden = false
+    and exists (select 1 from public.community_recipes c
+                where c.id = community_recipe_id and c.status = 'published')
+    and (parent_id is null or public.community_comment_visible(parent_id))
+  );
+create policy community_comments_insert_own on public.community_comments
+  for insert to authenticated
+  with check (
+    user_id = auth.uid()
+    and exists (select 1 from public.community_recipes c
+                where c.id = community_recipe_id and c.status = 'published')
+  );
+-- 评论者本人或菜的作者可「删除」（软删）；能改哪些列由下面的 guard 触发器限制。
+create policy community_comments_delete on public.community_comments
+  for update to authenticated
+  using (
+    user_id = auth.uid()
+    or exists (select 1 from public.community_recipes c
+               where c.id = community_recipe_id and c.author_id = auth.uid())
+  )
+  with check (
+    user_id = auth.uid()
+    or exists (select 1 from public.community_recipes c
+               where c.id = community_recipe_id and c.author_id = auth.uid())
+  );
+
+-- insert：只允许一层回复，且父评论属于同一道菜；客户端不能直接插入 deleted / hidden。
+-- update：客户端只能把 deleted 从 false 改成 true，其余列不变；service_role / postgres 可改 hidden。
+-- 任何角色把 deleted 改成 true 时都清空 body。
+-- 不是 security definer（要靠 current_user 区分客户端）；客户端看不到的父评论（hidden / 菜已撤回）
+-- 查不到，按「父评论不存在」报错。
+create or replace function public.community_comments_guard()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  v_client boolean := current_user in ('anon', 'authenticated');
+  v_parent public.community_comments%rowtype;
+begin
+  if tg_op = 'INSERT' then
+    if v_client then
+      new.deleted := false;
+      new.hidden := false;
+    end if;
+    if new.parent_id is not null then
+      select * into v_parent from public.community_comments where id = new.parent_id;
+      if not found then
+        raise exception 'parent comment % not found', new.parent_id using errcode = 'foreign_key_violation';
+      end if;
+      if v_parent.parent_id is not null then
+        raise exception 'replies can only target top-level comments' using errcode = 'check_violation';
+      end if;
+      if v_parent.community_recipe_id <> new.community_recipe_id then
+        raise exception 'parent comment belongs to another recipe' using errcode = 'check_violation';
+      end if;
+    end if;
+    return new;
+  end if;
+
+  if v_client then
+    if not (old.deleted = false and new.deleted = true)
+       or new.id is distinct from old.id
+       or new.community_recipe_id is distinct from old.community_recipe_id
+       or new.user_id is distinct from old.user_id
+       or new.parent_id is distinct from old.parent_id
+       or new.body is distinct from old.body
+       or new.hidden is distinct from old.hidden
+       or new.created_at is distinct from old.created_at then
+      raise exception 'comments can only be deleted' using errcode = 'check_violation';
+    end if;
+  end if;
+  if new.deleted and not old.deleted then
+    new.body := '';
+  end if;
+  return new;
+end $$;
+
+revoke all on function public.community_comments_guard() from public, anon, authenticated;
+
+drop trigger if exists community_comments_guard on public.community_comments;
+create trigger community_comments_guard
+  before insert or update on public.community_comments
+  for each row execute function public.community_comments_guard();
+
+create or replace function public.community_comments_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if not new.deleted then
+      update public.community_recipes
+         set comment_count = comment_count + 1
+       where id = new.community_recipe_id;
+    end if;
+  elsif new.deleted and not old.deleted then
+    update public.community_recipes
+       set comment_count = greatest(comment_count - 1, 0)
+     where id = new.community_recipe_id;
+  end if;
+  return new;
+end $$;
+
+revoke all on function public.community_comments_count() from public, anon, authenticated;
+
+drop trigger if exists community_comments_count on public.community_comments;
+create trigger community_comments_count
+  after insert or update of deleted on public.community_comments
+  for each row execute function public.community_comments_count();
+
+-- -------------------------------------------------------- community_reports
+create table if not exists public.community_reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references auth.users (id) on delete cascade,
+  community_recipe_id uuid references public.community_recipes (id) on delete cascade,
+  comment_id uuid references public.community_comments (id) on delete cascade,
+  reason text not null check (reason in ('ad', 'unfriendly', 'irrelevant', 'other')),
+  created_at timestamptz not null default now(),
+  resolved boolean not null default false,
+  constraint community_reports_one_target
+    check ((community_recipe_id is null) <> (comment_id is null))
+);
+-- 同一人对同一目标只能举报一次（菜和评论的 uuid 不会撞）。
+create unique index if not exists community_reports_reporter_target_uidx
+  on public.community_reports (reporter_id, (coalesce(community_recipe_id, comment_id)));
+
+alter table public.community_reports enable row level security;
+
+drop policy if exists community_reports_insert_own on public.community_reports;
+create policy community_reports_insert_own on public.community_reports
+  for insert to authenticated with check (reporter_id = auth.uid());
+-- 不给 select / update / delete：管理员在 Dashboard（postgres / service_role）处理。
