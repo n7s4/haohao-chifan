@@ -1,106 +1,164 @@
-# 好好吃饭 · 原生版（Expo）
+# 好好吃饭
 
-iPhone + Android 的 React Native 客户端，视觉基准来自 UI 的三屏设计稿。
-本目录是 Next.js 项目的子目录，不影响原有 Web 版本。
+一个管「今天吃什么、怎么做、去买什么」的做饭 App，也是朋友之间分享家常菜的小社区。
 
-## 启动
+用 Expo / React Native 写的 Android 应用（iOS 代码同样可以跑），后端是 Supabase。本地优先：不登录也能完整使用，登录后数据在多台设备间同步。
+
+## 功能
+
+### 找菜、做菜
+
+- **发现页**：内置菜谱和社区菜谱两个视图，按分类、热量筛选。
+- **减脂餐专题**：15 道内置减脂菜，分早餐、正餐、加餐，标注热量和蛋白质、碳水、脂肪（数值为估算）。
+- **菜谱详情**：按份数换算食材用量，可以收藏、打分、加入一周计划。
+- **烹饪模式**：一步一屏，分步计时器，计时结束发系统通知；做饭时屏幕常亮；中途退出后能恢复到原来那一步。
+
+### 计划和采购
+
+- **一周菜单**：按天、按餐排菜，一键清空某天。
+- **采购清单**：根据本周菜单自动汇总食材，可以勾选、改数量、手动加减，没买完的会带到下一周。
+
+### 自己的菜谱
+
+- **新建菜谱**：手动填写，支持封面图和步骤图。
+- **AI 导入**：贴一段笔记文字、截图或小红书链接，自动解析成菜谱草稿；视频笔记会截取画面帮你补图。改好再保存。
+- **备份**：导出、导入本地数据。
+
+### 账号和同步
+
+- 邮箱注册登录。游客数据在首次登录时可以合并进账号。
+- 计划、收藏、采购清单、自建菜谱等在云端同步；离线时的改动先进队列，联网后再推上去。
+
+### 社区
+
+- 把自建菜发布到社区，可以随时更新或撤回。
+- 点赞、收藏、评论（支持一层回复），也可以把别人的菜存成自己的私有菜谱。
+- 昵称、头像，个人主页。
+- 关注、粉丝列表，拉黑，举报菜谱、评论、用户。
+
+### 私信和群聊
+
+- 一对一私信。对方没回关时只能先发一条，防止骚扰；拉黑后双方都发不了。
+- 群聊：最多 50 人，只能拉互相关注的人。群主可以改群名、移出成员；群主退群后自动转给其他成员。
+- 消息实时到达，有未读角标和已读状态，可以举报消息。
+
+### 热更新
+
+接入 EAS Update。只改 JS 和资源时直接推送，用户下次打开 App 就是新版本，不用重新安装。
+
+## 技术栈
+
+| 层 | 用了什么 |
+| --- | --- |
+| App | Expo SDK 58、React Native 0.88、React 19、TypeScript（strict） |
+| 路由 | expo-router（文件路由、typed routes） |
+| 动画和手势 | Reanimated 4、react-native-gesture-handler、react-native-keyboard-controller |
+| 本地存储 | AsyncStorage |
+| 后端 | Supabase：Postgres + RLS、Auth、Storage、Realtime、Edge Functions |
+| AI 导入 | Edge Function 调用 DeepSeek 解析菜谱；阿里云百炼 Paraformer 转写视频配音 |
+| 测试 | Deno 单元测试、pgTAP 数据库测试 |
+| 构建和发布 | EAS Build（APK）、EAS Update |
+
+## 目录结构
+
+```text
+src/
+  app/                  页面（expo-router 文件路由）
+    (tabs)/             底部标签：发现、计划、新建、收藏、我的
+    recipe/ cook/       菜谱详情、烹饪模式
+    community/ user/    社区菜谱详情、用户主页和关注列表
+    messages/           会话列表、私信、群聊
+    shopping-list.tsx   采购清单
+    fat-loss.tsx        减脂餐专题
+    account.tsx sign-in.tsx blocked.tsx ...
+  components/           界面组件
+  lib/
+    sync/               云端同步：离线队列、拉取、合并（说明见 src/lib/sync/README.md）
+    community/          社区、关注、私信的接口和纯逻辑（附单元测试）
+    supabase.ts         Supabase 客户端和登录
+    importRecipe.ts     AI 导入
+    cookSession.ts cookNotify.ts  烹饪会话和计时通知
+  state/                全局 store
+  data/                 内置菜谱、分类、减脂餐数据
+supabase/
+  migrations/           数据库迁移 001–010
+  tests/                pgTAP 测试
+  functions/            Edge Functions：import-recipe、fetch-xhs-note
+docs/                   运维文档和设计文档
+```
+
+## 本地开发
+
+### 1. 安装依赖
 
 ```bash
-cd ~/code/haohao-chifan/mobile
 npm install
+```
+
+### 2. 配置 Supabase（可选）
+
+在项目根目录建 `.env.local`：
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://<你的项目>.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key>   # 也可以用 EXPO_PUBLIC_SUPABASE_ANON_KEY
+```
+
+不配置也能运行，只是登录、同步、社区、私信这些云端功能会关掉。所有 `.env*` 文件都在 `.gitignore` 里，不要提交。
+
+### 3. 启动
+
+```bash
 npx expo start
 ```
 
-- iPhone：用 iPhone 相机扫码，在 Expo Go 里打开（需要手机和电脑在同一 Wi-Fi）
-- Android：用 Expo Go 扫码
-- 浏览器预览：`npx expo start --web`
+推荐装开发版客户端（`eas build --profile development`）调试。通知、热更新等原生能力在 Expo Go 里不完整。
 
-如果本机装了 Xcode / Android Studio，也可以直接：
+### 4. 数据库
 
-```bash
-npx expo run:ios
-npx expo run:android
-```
-
-## 已实现
-
-- 底部 Tab：发现 / 计划 / 收藏 / 我的
-- 发现页：搜索（菜谱、食材、标签）、分类筛选（推荐 / 快手菜 / 家常菜 / 轻食）、推荐卡片、收藏
-- 菜谱详情：食材份量增减（1–6 人份）、食材勾选、步骤、收藏、开始烹饪
-  - 份量会持久化，并贯穿到采购清单的数量汇总
-- 沉浸式烹饪：步骤进度、总步骤、上一步 / 下一步、计时与暂停、完成弹窗（五星评分 / 收藏 / 记入今日午餐）
-  - 烹饪期间屏幕常亮（`expo-keep-awake`）
-  - 计时按时间戳校准：切后台 / 锁屏回来按 `Date.now()` 重算，暂停精确结算，切步重置倒计时
-  - 到点本地通知（`expo-notifications`）：标题带菜名与「第 N/M 步」，正文是这一步的要点；暂停、切步、退出、完成都会撤销预约
-  - 通知权限被拒时不静默：页面明示「离开 App 可能收不到提醒，前台仍会震动」，前台到点依旧震动；权限被拒时提供「去设置」并回到前台后重读状态
-  - 申请权限前先创建 Android `cooking-timer` 通知渠道（Android 13+ 无渠道时系统框可能不弹）
-  - Android 使用 `DATE` trigger + `delivery: 'alarmClock'` 精确到点；未获精确闹钟授权时自动回退 bestEffort，可能延迟数十秒但不丢提醒
-- 每周菜单：周切换、日期切换、三餐卡片、编辑模式（替换 / 删除 / 前后挪日）、空位添加
-  - 首启不预排任何菜：新的这一周是空的，避免用户误以为菜单是自己排的
-  - 空周引导：整周为空时给「帮我排 3 天」，优先从收藏取菜（无收藏则用菜谱库）补满连续三天空着的餐位；看的是哪一周就排哪一周（本周从今天起，其它周从周一起），不会排进看不见的那周
-- 收藏页：收藏列表与取消收藏
-- 采购清单：按本周菜单汇总并合并同类食材（同名同单位相加，份量按人数折算）、勾选已购买并移到下方、撤销、数量增减（g/ml 每次 10，个/颗/瓣等每次 1，最低 1 或 0.5）、手动添加、删除
-  - 勾选状态与手动改过的数量都按「周 + 食材」记录：这周买过的小番茄不会让下周直接划线，改这周数量也不影响下周（旧版裸 id 数据在加载和导入备份时自动补当前周前缀）
-- 我的页：收藏数 / 本周做了 / 计划中三项真实统计，最近下厨记录（走完烹饪最后一步写入），按「本周 / 上周 / 更早」分组，行内显示「今天 · 10 月 22 日」这类星期 + 日期，上周及更早默认只露 2 条、可展开
-- 再做一次：菜谱详情 footer「加入菜单」弹层选日期与餐次（替换前橙色提示当前菜，替换后 5 秒内可撤销回滚），或在「我的 → 最近下厨」点每行右侧「再做一次」
-- 采购清单跨周顺延：底栏「未买的 N 项带到下周」，只搬未勾选项；下周已有同类食材自动合并数量，手动项按周归属，不覆盖下周菜单
-- 备份：我的页「导出与导入备份」并显示上次导出日期，导出带日期的 JSON（菜单 / 收藏 / 评分 / 份量 / 下厨记录 / 清单）；导入先显示摘要，确认后覆盖（覆盖类确认一律橙色）
-- 烹饪会话恢复：烹饪进度（步骤 / 剩余时间 / 已用时）落盘，重开 App 回到该菜谱会弹「继续上次烹饪 · 第 N 步 · 还剩 mm:ss」底部卡，「继续」接着走表、「结束并记录」写入最近下厨；首页顶部也有「继续上次烹饪」入口直达；暂停时保存剩余时长，计时中保存 deadline，切后台按真实时间校准；闲置超 8 小时自动丢弃
-- 本地持久化：菜单 / 收藏 / 采购 / 烹饪会话状态 / 份量 / 下厨记录用 AsyncStorage 保存，重启不丢
-
-## 尚未实现
-
-- 后端账号与多设备同步（当前是本机本地存储）
-- 菜谱库远程数据源与图片（当前用内置 SVG 插画）
-- 评分同步到服务端（评分只存本机；详情页显示「我的评分」，不再展示虚构的社区评分与评价数）
-- 自动云备份（导出/导入需手动触发）
-
-## 结构
-
-```
-src/
-  theme.ts              设计 token（奶白 / 罗勒绿 / 番茄橙 / 米色）
-  data/recipes.ts       菜谱、食材、步骤
-  state/store.tsx       菜单 / 收藏 / 采购状态 + AsyncStorage
-  components/           FoodArt、图标、通用 UI、加入菜单弹层、备份弹层、确认层
-  app/                  expo-router 路由
-    (tabs)/             发现、计划、收藏、我的
-    recipe/[id].tsx     菜谱详情
-    cook/[id].tsx       沉浸式烹饪
-    shopping-list.tsx   采购清单
-```
-
-## 校验
+迁移文件在 `supabase/migrations/`，按编号顺序执行，每个都可以重复执行。
 
 ```bash
-npx tsc --noEmit
-npx expo export --platform web
+supabase start        # 本地起一套 Supabase（需要 Docker）
+supabase db reset     # 按顺序应用全部迁移
+supabase test db      # 跑 supabase/tests 里的 pgTAP 测试
+supabase stop
 ```
 
-## 真机验证清单（通知与会话）
+AI 导入要用的 Edge Function 密钥：
 
-通知权限、时序、会话恢复这三块 Web 预览验证不了，必须上真机（Expo Go 即可，本地通知在 SDK 53 仍可用）。
+```bash
+supabase secrets set DEEPSEEK_API_KEY=...       # 必填，菜谱解析
+supabase secrets set DASHSCOPE_API_KEY=...      # 可选，视频配音转写
+# 可选：DEEPSEEK_MODEL、DASHSCOPE_BASE_URL、IMPORT_TICKET_SECRET
+```
 
-### 权限
-- 首次进烹饪页**不弹**系统框；点「开始计时」后才在进度条下出现 30 高的一行「离开 App 也能收到到点提醒 / 开启」。
-- 点「开启」才弹系统授权框；拒绝后同一位置变成「提醒已关闭，到点只在前台提示 / 去设置」，不重复弹。
-- 去系统设置打开通知后回到 App，这一行应自动变成已授权（消失），不需要重进页面。
+## 检查和测试
 
-### 通知时序
-- 计时中锁屏，到点收到通知，标题是「菜名 · 第 N 步」，正文是这一步的第一句。
-- 暂停后到原定时间**不再响**；继续后按新的到点时间只响一次。
-- 切到下一步：上一步的通知被取消，只留当前步这一条，时长按当前步算。
-- 点通知回到该菜谱该步骤，停在原来那一步，不回首屏。
-- 退出（放弃 / 保存进度）后没有迟到通知。
-- Android 13+ 未给「闹钟和提醒」权限时提醒可能晚几十秒，但不会丢；给了则准点。
-- App 在前台时不弹横幅，只用页内「计时完成」标签 + 震动。
+```bash
+npm run typecheck     # tsc --noEmit
+npm run lint          # expo lint
+npm run test:unit     # Deno 单元测试（社区、关注、私信逻辑）
+supabase test db      # 数据库权限和规则测试
+```
 
-### 会话恢复
-- 锁屏 20 分钟再回来：通知照常响，重开 App 弹「继续上次烹饪 · 第 N 步 · 还剩 mm:ss」，点「继续」从该步该剩余时间接着走，不是第 1 步满格。
-- 点「结束并记录」写入最近下厨，不再弹这张卡。
-- 暂停后杀掉 App 再打开：剩余时间从暂停那一刻起算，不倒退也不多走。
-- 闲置超过 8 小时再打开：直接丢弃，不弹卡。
+## 构建和发布
 
-### 采购与跨周（已在 Web 端自动验证，真机复核一次即可）
-- 本周勾掉某项，切到下周同一食材仍是未勾。
-- 本周把某项数量 +1，下周同一食材数量不变。
+| 场景 | 命令 |
+| --- | --- |
+| 打安装包（内部分发 APK） | `npx eas-cli build --profile preview --platform android` |
+| 推送热更新 | 见 [docs/ota-updates.md](docs/ota-updates.md) |
+
+`runtimeVersion` 用的是 `fingerprint` 策略。加原生库、改 app.json 的权限或插件、改 `package.json` 的 scripts 都会改变指纹，这时旧安装包收不到热更新，需要重新打包。
+
+## 文档
+
+- [热更新发布](docs/ota-updates.md)
+- [社区管理 SQL](docs/community-admin.md)：处理举报、下架菜谱、隐藏评论
+- [真机验证清单](docs/real-device-checklist.md)
+- [云端同步说明](src/lib/sync/README.md)
+- [设计文档](docs/superpowers/specs/)：小红书导入、社区、减脂餐、关注和私信
+
+## 许可证
+
+[MIT](LICENSE)
