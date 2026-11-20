@@ -42,6 +42,8 @@ import {
   splitColumns,
 } from "../../components/RecipeTile";
 import { CommunityFeed } from "../../components/community/CommunityFeed";
+import { FatLossEntry } from "../../components/FatLossEntry";
+import { fatLossList } from "../../data/fatLoss";
 import { CreateFab, fabCollapsed } from "../../components/TabBar";
 import { Toast, useToast } from "../../components/Toast";
 import {
@@ -113,6 +115,7 @@ export default function DiscoverScreen() {
   const todayKey = toKey(now);
   const today = plan[todayKey] ?? {};
   const hello = greeting(now);
+  const fatLossCount = useMemo(() => fatLossList(allRecipes).length, [allRecipes]);
 
   const columnWidth = Math.floor((width - PAD * 2 - GAP) / 2);
   const heroRecipe = findRecipe(HERO_RECIPE_ID) ?? allRecipes[0];
@@ -175,6 +178,8 @@ export default function DiscoverScreen() {
     </Animated.View>
   );
 
+  const fatLossEntry = <FatLossEntry count={fatLossCount} />;
+
   const modeTabs = (
     <View style={styles.modeTabs} accessibilityRole="tablist">
       {(["recipes", "community"] as const).map((key) => {
@@ -204,7 +209,7 @@ export default function DiscoverScreen() {
       {/* 社区首次打开才挂载；之后和菜谱都保持挂载，来回切不丢滚动位置和筛选。 */}
       {communityOpened ? (
         <View style={[styles.pane, mode !== "community" && styles.hidden]}>
-          <CommunityFeed header={<>{helloBlock}{modeTabs}</>} bottomPad={spacing.xxxl + 56} />
+          <CommunityFeed header={<>{helloBlock}{fatLossEntry}{modeTabs}</>} bottomPad={spacing.xxxl + 56} />
         </View>
       ) : null}
       <ScrollView
@@ -216,6 +221,7 @@ export default function DiscoverScreen() {
         scrollEventThrottle={32}
       >
         {helloBlock}
+        {fatLossEntry}
         {modeTabs}
 
         {/* 搜索 */}

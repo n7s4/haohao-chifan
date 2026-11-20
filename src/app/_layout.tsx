@@ -71,6 +71,7 @@ export default function RootLayout() {
                 <Stack.Screen name="sign-in" options={{ presentation: "modal" }} />
                 <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
                 <Stack.Screen name="account" />
+                <Stack.Screen name="fat-loss" />
               </Stack>
             </CommunityProfileProvider>
           </StoreProvider>

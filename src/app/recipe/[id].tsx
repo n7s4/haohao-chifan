@@ -395,6 +395,17 @@ export default function RecipeDetailScreen() {
               label="千卡 / 份"
             />
           </Animated.View>
+          {recipe.nutrition ? (
+            <Animated.View entering={rise(2)} style={styles.macros} accessibilityLabel={`营养估算：蛋白质 ${recipe.nutrition.protein} 克，碳水 ${recipe.nutrition.carbs} 克，脂肪 ${recipe.nutrition.fat} 克`}>
+              {([["蛋白质", recipe.nutrition.protein], ["碳水", recipe.nutrition.carbs], ["脂肪", recipe.nutrition.fat]] as const).map(([label, grams]) => (
+                <View key={label} style={styles.macro}>
+                  <AppText size={12} color={colors.leafText}>{label}</AppText>
+                  <AppText size={15} weight="800" color={colors.leafText} style={{ fontVariant: ["tabular-nums"] }}>{grams}g</AppText>
+                </View>
+              ))}
+              <AppText size={11} color={colors.leafText} style={styles.macroNote}>估算</AppText>
+            </Animated.View>
+          ) : null}
 
           <RecipeBody
             recipe={recipe}
@@ -953,6 +964,19 @@ const styles = StyleSheet.create({
   },
 
   stats: { flexDirection: "row", gap: spacing.sm, marginTop: 18, marginBottom: 6 },
+  macros: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.lg,
+    backgroundColor: colors.leafSoft,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    marginTop: spacing.sm,
+    marginBottom: 6,
+  },
+  macro: { flexDirection: "row", alignItems: "baseline", gap: 4 },
+  macroNote: { marginLeft: "auto", opacity: 0.8 },
   stat: {
     flex: 1,
     backgroundColor: colors.surface,
