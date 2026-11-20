@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -433,6 +434,9 @@ function CommentItem({
   onReply: () => void;
   onLongPress: () => void;
 }) {
+  const openUser = () => {
+    if (comment.userId) router.push(`/user/${comment.userId}`);
+  };
   return (
     <Pressable
       onPress={onReply}
@@ -441,17 +445,29 @@ function CommentItem({
       style={({ pressed }) => [styles.item, pressed && { opacity: 0.85 }]}
       accessibilityHint="点按回复，长按可删除或举报"
     >
-      <Avatar uri={profile?.avatarUrl ?? null} name={nickname} size={small ? 26 : 34} />
+      <Pressable
+        onPress={openUser}
+        disabled={!comment.userId}
+        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel={`查看 ${nickname} 的主页`}
+      >
+        <Avatar uri={profile?.avatarUrl ?? null} name={nickname} size={small ? 26 : 34} />
+      </Pressable>
       <View style={{ flex: 1 }}>
-        <AppText size={13} weight="700" color={colors.muted} numberOfLines={1}>
-          {nickname}
+        <View style={styles.nameRow}>
+          <Pressable onPress={openUser} disabled={!comment.userId} hitSlop={6} style={styles.nameHit}>
+            <AppText size={13} weight="700" color={colors.muted} numberOfLines={1}>
+              {nickname}
+            </AppText>
+          </Pressable>
           {replyToNickname ? (
-            <AppText size={13} weight="400" color={colors.placeholder}>
+            <AppText size={13} weight="400" color={colors.placeholder} numberOfLines={1} style={styles.replyTo}>
               {" 回复 "}
               <AppText size={13} weight="700" color={colors.muted}>@{replyToNickname}</AppText>
             </AppText>
           ) : null}
-        </AppText>
+        </View>
         <AppText size={15} style={styles.body}>
           {comment.body}
         </AppText>
@@ -602,6 +618,9 @@ function SendIcon({ color = colors.white, size = 18 }: { color?: string; size?: 
 }
 
 const styles = StyleSheet.create({
+  nameRow: { flexDirection: "row", alignItems: "center" },
+  nameHit: { flexShrink: 1 },
+  replyTo: { flexShrink: 1 },
   entry: {
     marginTop: spacing.md,
     minHeight: 44,

@@ -76,6 +76,7 @@ export default function RootLayout() {
                 <Stack.Screen name="fat-loss" />
                 <Stack.Screen name="user/[id]" />
                 <Stack.Screen name="user/follows" />
+                <Stack.Screen name="blocked" />
               </Stack>
             </BlocksProvider>
             </CommunityProfileProvider>

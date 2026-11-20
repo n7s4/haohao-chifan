@@ -207,6 +207,13 @@ export default function AccountScreen() {
             onPress={openNickname}
           />
           <Row
+            icon={<UserIcon size={19} color={colors.danger} />}
+            tint={colors.accentSoft}
+            label="黑名单"
+            sub="被拉黑的人看不到你的动态，也无法关注你"
+            onPress={() => router.push("/blocked")}
+          />
+          <Row
             icon={<LockIcon size={19} color={colors.ink} />}
             tint={colors.skySoft}
             label="修改密码"

@@ -43,6 +43,7 @@ import {
   requestNotifyPermission,
 } from "../../lib/cookNotify";
 import { useRecipeCoverUris } from "../../lib/useMedia";
+import { MySocialRow } from "../../components/community/MySocialRow";
 import { useAuth } from "../../lib/useAuth";
 import { addDays, parseKey, startOfWeek, toKey, useStore } from "../../state/store";
 import { colors, motion, radius, shadow, spacing } from "../../theme";
@@ -298,6 +299,11 @@ export default function ProfileScreen() {
             <ChevronRightIcon size={20} color={colors.ink} />
           </PressScale>
         </Animated.View>
+        {auth.userId ? (
+          <Animated.View entering={rise(0)}>
+            <MySocialRow userId={auth.userId} />
+          </Animated.View>
+        ) : null}
 
         {syncPaused ? (
           <Animated.View entering={rise(1)} style={styles.pauseCard}>

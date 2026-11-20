@@ -20,7 +20,7 @@ import { AppText, usePressScale } from "../../components/Common";
 import { Comments, type CommentsHandle } from "../../components/community/Comments";
 import { ActionSheet, ReportSheet } from "../../components/community/ReportSheet";
 import { FoodArt } from "../../components/FoodArt";
-import { BackIcon, HeartIcon } from "../../components/Icons";
+import { BackIcon, ChevronRightIcon, HeartIcon } from "../../components/Icons";
 import { ImageViewer, type ViewerImage } from "../../components/ImageViewer";
 import { RecipeBody, rise } from "../../components/recipe/RecipeBody";
 import { ART_TINTS } from "../../components/RecipeTile";
@@ -351,11 +351,20 @@ export default function CommunityRecipeScreen() {
             </AppText>
           </Animated.View>
 
-          <Animated.View entering={rise(1)} style={styles.authorRow}>
-            <Avatar builtin={isBuiltin} uri={author?.avatarUrl ?? null} name={authorName} />
-            <AppText size={15} weight="700" numberOfLines={1} style={{ flex: 1 }}>
-              {authorName || " "}
-            </AppText>
+          <Animated.View entering={rise(1)}>
+            <Pressable
+              disabled={isBuiltin || !cr.authorId}
+              onPress={() => cr.authorId && router.push(`/user/${cr.authorId}`)}
+              style={({ pressed }) => [styles.authorRow, pressed && { opacity: 0.7 }]}
+              accessibilityRole={isBuiltin ? undefined : "button"}
+              accessibilityLabel={isBuiltin ? undefined : `查看 ${authorName} 的主页`}
+            >
+              <Avatar builtin={isBuiltin} uri={author?.avatarUrl ?? null} name={authorName} />
+              <AppText size={15} weight="700" numberOfLines={1} style={{ flex: 1 }}>
+                {authorName || " "}
+              </AppText>
+              {isBuiltin || !cr.authorId ? null : <ChevronRightIcon size={18} color={colors.placeholder} />}
+            </Pressable>
           </Animated.View>
 
           <RecipeBody
