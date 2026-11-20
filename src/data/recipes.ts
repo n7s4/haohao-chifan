@@ -1,4 +1,5 @@
 import { normalizeSteps, type RecipeStep, type StepImage } from "../lib/steps";
+import { fatLossRecipes } from "./fatLossRecipes";
 
 export type ArtKind = "pasta" | "salad" | "rice" | "soup" | "toast";
 
@@ -34,10 +35,17 @@ export type Recipe = {
   custom?: boolean;
   /** 从社区「存到我的菜谱」来的：记下社区菜 id 和当时的作者昵称。 */
   origin?: { communityId: string; authorNickname: string };
+  /** 三大营养素（克，估算）；目前只有减脂餐内置菜填。 */
+  nutrition?: Nutrition;
+  /** 属于减脂餐专题，以及它算早餐 / 正餐 / 加餐。 */
+  fatLoss?: FatLossMeal;
 };
 
+export type Nutrition = { protein: number; carbs: number; fat: number };
+export type FatLossMeal = "breakfast" | "main" | "snack";
+
 /** 内置菜的步骤常量仍然写成字符串，导出时统一 normalize 成对象，改一处即可。 */
-type BuiltInRecipe = Omit<Recipe, "steps"> & { steps: string[] };
+export type BuiltInRecipe = Omit<Recipe, "steps"> & { steps: string[] };
 
 const builtInRecipes: BuiltInRecipe[] = [
   {
@@ -191,7 +199,7 @@ const builtInRecipes: BuiltInRecipe[] = [
   },
 ];
 
-export const recipes: Recipe[] = builtInRecipes.map((recipe) => ({
+export const recipes: Recipe[] = [...builtInRecipes, ...fatLossRecipes].map((recipe) => ({
   ...recipe,
   steps: normalizeSteps(recipe.steps),
 }));
