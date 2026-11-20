@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { followButtonLabel, followState, hideBlocked } from "./socialLogic.ts";
+import { afterToggle, followButtonLabel, followState, hideBlocked } from "./socialLogic.ts";
 
 Deno.test("followState：四种关系", () => {
   assertEquals(followState(false, false), "none");
@@ -28,4 +28,11 @@ Deno.test("hideBlocked：去掉被拉黑作者的行，保留没有作者的行"
 Deno.test("hideBlocked：黑名单为空时原样返回同一数组", () => {
   const rows = [{ id: "1", author: "u1" }];
   assertEquals(hideBlocked(rows, new Set(), (r) => r.author), rows);
+});
+
+Deno.test("afterToggle：关注 / 回关 / 取关 / 取关互关", () => {
+  assertEquals(afterToggle("none"), "following");
+  assertEquals(afterToggle("followed_by"), "mutual");
+  assertEquals(afterToggle("following"), "none");
+  assertEquals(afterToggle("mutual"), "followed_by");
 });

@@ -74,6 +74,8 @@ export default function RootLayout() {
                 <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
                 <Stack.Screen name="account" />
                 <Stack.Screen name="fat-loss" />
+                <Stack.Screen name="user/[id]" />
+                <Stack.Screen name="user/follows" />
               </Stack>
             </BlocksProvider>
             </CommunityProfileProvider>

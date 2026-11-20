@@ -2,7 +2,6 @@ import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Keyboard,
   Modal,
   Platform,
@@ -19,6 +18,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { AppText, usePressScale } from "../Common";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { CloseIcon } from "../Icons";
+import { Avatar } from "./Avatar";
 import { ActionSheet, ReportSheet, type SheetAction } from "./ReportSheet";
 import {
   addComment,
@@ -466,21 +466,6 @@ function CommentItem({
   );
 }
 
-function Avatar({ uri, name, size }: { uri: string | null; name: string; size: number }) {
-  const [failed, setFailed] = useState(false);
-  const box = { width: size, height: size, borderRadius: size / 2 };
-  if (uri && !failed) {
-    return <Image alt={name} source={{ uri }} style={[styles.avatar, box]} onError={() => setFailed(true)} />;
-  }
-  return (
-    <View style={[styles.avatar, styles.avatarFallback, box]}>
-      <AppText size={Math.round(size * 0.42)} weight="800" color={colors.accentText}>
-        {Array.from(name)[0] ?? ""}
-      </AppText>
-    </View>
-  );
-}
-
 /* ---------------- 底部评论框 ---------------- */
 
 function Composer({
@@ -639,8 +624,6 @@ const styles = StyleSheet.create({
   deletedRow: { paddingVertical: spacing.sm },
   replies: { marginLeft: 44, marginTop: 2 },
   item: { flexDirection: "row", gap: 10, paddingVertical: 6 },
-  avatar: { backgroundColor: colors.surfaceAlt },
-  avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: colors.accentSoft },
   body: { marginTop: 2, lineHeight: 22 },
   meta: { flexDirection: "row", alignItems: "center", gap: spacing.lg, marginTop: 4 },
 
