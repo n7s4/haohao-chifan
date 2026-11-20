@@ -3,8 +3,10 @@ import React, { useCallback, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { getSocialStats } from "../../lib/community/social";
+import { useUnread } from "../../lib/community/useUnread";
 import { getSupabase } from "../../lib/supabase";
 import { colors, radius, shadow } from "../../theme";
+import { badgeText } from "../../lib/community/messagesLogic";
 import { AppText } from "../Common";
 import { ChevronRightIcon } from "../Icons";
 
@@ -27,6 +29,8 @@ export function MySocialRow({ userId }: { userId: string }) {
     }, [userId])
   );
 
+  const unread = useUnread();
+
   const openFollows = (tab: "following" | "followers") =>
     router.push({ pathname: "/user/follows", params: { id: userId, tab } });
 
@@ -41,6 +45,14 @@ export function MySocialRow({ userId }: { userId: string }) {
         <AppText size={12} color={colors.muted}>粉丝</AppText>
       </Pressable>
       <View style={{ flex: 1 }} />
+      <Pressable onPress={() => router.push("/messages")} style={styles.msg} accessibilityRole="button">
+        <AppText size={13} weight="700">消息</AppText>
+        {unread.total > 0 ? (
+          <View style={styles.badge}>
+            <AppText size={11} weight="800" color={colors.white}>{badgeText(unread.total)}</AppText>
+          </View>
+        ) : null}
+      </Pressable>
       <Pressable onPress={() => router.push(`/user/${userId}`)} style={styles.home} accessibilityRole="button">
         <AppText size={13} weight="700">我的主页</AppText>
         <ChevronRightIcon size={16} color={colors.muted} />
@@ -52,6 +64,17 @@ export function MySocialRow({ userId }: { userId: string }) {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 22, paddingHorizontal: 20, marginTop: 14 },
   cell: { alignItems: "flex-start" },
+  msg: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    ...shadow.card,
+  },
+  badge: { minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, backgroundColor: colors.accent, alignItems: "center", justifyContent: "center" },
   home: {
     flexDirection: "row",
     alignItems: "center",

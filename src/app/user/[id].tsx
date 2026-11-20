@@ -24,6 +24,7 @@ import { coverHeightFor, RecipeTile, splitColumns } from "../../components/Recip
 import { Toast, useToast } from "../../components/Toast";
 import { getProfiles, type PublicProfile, report, type ReportReason } from "../../lib/community/api";
 import type { CommunityRecipe } from "../../lib/community/logic";
+import { openDirect } from "../../lib/community/messages";
 import { getSocialStats, listUserRecipes } from "../../lib/community/social";
 import { FALLBACK_NICKNAME, type FollowState, followState } from "../../lib/community/socialLogic";
 import { useBlocks } from "../../lib/community/useBlocks";
@@ -72,6 +73,7 @@ export default function UserScreen() {
   const [reportOpen, setReportOpen] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [nicknameOpen, setNicknameOpen] = useState(false);
+  const [dmBusy, setDmBusy] = useState(false);
 
   useEffect(() => {
     if (!authReady || !id) return;
@@ -150,6 +152,22 @@ export default function UserScreen() {
     if (!userId) return;
     const r = await report(getSupabase(), userId, { userId: id }, reason).catch(() => ({ ok: false as const, reason: "network" as const }));
     showText(r.ok ? "收到，我们会尽快处理" : failMessage(r.reason));
+  };
+
+  const onMessage = async () => {
+    if (!userId) {
+      router.push("/sign-in");
+      return;
+    }
+    if (dmBusy) return;
+    setDmBusy(true);
+    const r = await openDirect(getSupabase(), id).catch(() => ({ ok: false as const, reason: "network" as const }));
+    setDmBusy(false);
+    if (!r.ok) {
+      showText(r.reason === "unavailable" ? "对方暂时无法接收消息" : failMessage(r.reason));
+      return;
+    }
+    router.push({ pathname: "/messages/[id]", params: { id: r.value } });
   };
 
   const openMenu = () => {
@@ -232,7 +250,12 @@ export default function UserScreen() {
                 <AppText size={14} weight="700">没加载出来，点此重试</AppText>
               </Pressable>
             ) : (
-              <FollowButton targetId={id} state={userId ? relation : "none"} onChange={setRelation} toast={showText} />
+              <View style={styles.actionRow}>
+                <FollowButton targetId={id} state={userId ? relation : "none"} onChange={setRelation} toast={showText} />
+                <Pressable onPress={onMessage} disabled={dmBusy} style={styles.ghostBtn} accessibilityRole="button">
+                  {dmBusy ? <ActivityIndicator size="small" color={colors.muted} /> : <AppText size={14} weight="700">私信</AppText>}
+                </Pressable>
+              </View>
             )}
           </View>
         </View>
@@ -355,6 +378,7 @@ const styles = StyleSheet.create({
   name: { marginTop: spacing.md, letterSpacing: -0.4, maxWidth: "90%" },
   statsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
   actions: { marginTop: spacing.lg },
+  actionRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   ghostBtn: {
     height: 38,
     paddingHorizontal: 20,
