@@ -47,7 +47,7 @@ export default function NewGroupScreen() {
     () => defaultGroupName(selected.map((id) => profiles?.get(id)?.nickname ?? FALLBACK_NICKNAME)),
     [selected, profiles],
   );
-  // 手动改过群名就不再跟着选择变；清空后恢复默认。
+  // 手动改过群名（含清空）就不再跟着选择变；只有 null 表示没碰过。
   const name = edited ?? autoName;
   const validName = validateGroupName(name);
   const canSubmit = canCreateGroup(selected.length) && validName !== null && !busy;
@@ -123,7 +123,7 @@ export default function NewGroupScreen() {
             <View style={styles.head}>
               <TextInput
                 value={name}
-                onChangeText={(t) => setEdited(t === "" ? null : t)}
+                onChangeText={(t) => setEdited(t)}
                 placeholder="群名"
                 placeholderTextColor={colors.placeholder}
                 maxLength={GROUP_NAME_MAX}

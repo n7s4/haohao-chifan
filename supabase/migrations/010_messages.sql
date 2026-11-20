@@ -264,6 +264,7 @@ grant execute on function public.mark_read(uuid) to authenticated;
 -- --------------------------------------------------------- my_conversations
 -- 我所在的全部会话，一次拿到预览和未读数。按调用者权限执行（RLS 只放出我所在的会话）。
 -- 群聊里我拉黑的人发的消息不计未读、也不作预览（客户端也会过滤掉）；私信不排除。
+-- 没有消息的私信不列出（群聊建好就列出，哪怕还没人说话）。
 create or replace function public.my_conversations()
 returns table (
   id uuid,
@@ -314,6 +315,8 @@ as $$
      order by m.created_at desc, m.id desc
      limit 1
   ) lm on true
+  -- 私信要有第一条消息才出现：open_direct 会立刻写入双方成员，空会话不能冒到对方列表里。
+  where c.kind = 'group' or exists (select 1 from public.messages m where m.conversation_id = c.id)
   order by c.last_message_at desc, c.id;
 $$;
 

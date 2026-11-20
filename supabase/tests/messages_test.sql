@@ -2,7 +2,7 @@
 begin;
 set local client_min_messages = warning;
 create extension if not exists pgtap with schema extensions;
-select plan(151);
+select plan(154);
 
 -- 测试用户：A、B、C、D
 insert into auth.users (id, instance_id, aud, role, email) values
@@ -111,11 +111,16 @@ select is((select unread from public.my_conversations() where id = current_setti
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 select ok(set_config('test.ac', public.open_direct('33333333-3333-4333-8333-333333333333')::text, true) is not null, 'A 开和 C 的私信（不要求关注）');
-select results_eq($$select last_body, last_sender_id, unread, peer_id from public.my_conversations() where id = current_setting('test.ac')::uuid$$,
-  $$values (null::text, null::uuid, 0, '33333333-3333-4333-8333-333333333333'::uuid)$$, '没有消息时预览为空');
+select is((select count(*)::int from public.my_conversations() where id = current_setting('test.ac')::uuid), 0, '没有消息的私信不出现在发起人的会话列表');
+set local request.jwt.claims = '{"sub":"33333333-3333-4333-8333-333333333333","role":"authenticated"}';
+select is((select count(*)::int from public.my_conversations() where id = current_setting('test.ac')::uuid), 0, '没有消息的私信也不出现在对方的会话列表');
+set local request.jwt.claims = '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 select lives_ok($$insert into public.messages (conversation_id, sender_id, body) values (current_setting('test.ac')::uuid, '11111111-1111-4111-8111-111111111111', '嗨 C')$$, 'A 给 C 发一条');
 select results_eq($$select last_body, last_sender_id from public.my_conversations() where id = current_setting('test.ac')::uuid$$,
   $$values ('嗨 C'::text, '11111111-1111-4111-8111-111111111111'::uuid)$$, '预览是最新一条消息');
+set local request.jwt.claims = '{"sub":"33333333-3333-4333-8333-333333333333","role":"authenticated"}';
+select is((select count(*)::int from public.my_conversations() where id = current_setting('test.ac')::uuid), 1, '发出第一条消息后对方的会话列表里出现该私信');
+set local request.jwt.claims = '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
 reset role;
 update public.conversations set last_message_at = '2000-01-01' where id = current_setting('test.ab')::uuid;
 set local role authenticated;
@@ -170,6 +175,7 @@ select throws_ok($$select public.create_group('饭友', array['22222222-2222-422
 select throws_ok($$select public.create_group('   ', array['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333']::uuid[])$$, 'P0001', 'invalid', '空群名不能建群');
 select throws_ok($$select public.create_group(repeat('名', 31), array['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333']::uuid[])$$, 'P0001', 'invalid', '31 字群名不能建群');
 select ok(set_config('test.g', public.create_group(' 饭友 ', array['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333']::uuid[])::text, true) is not null, 'A 选 B、C 建群成功');
+select is((select count(*)::int from public.my_conversations() where id = current_setting('test.g')::uuid), 1, '还没有消息的群照常出现在会话列表');
 select results_eq($$select kind, name, owner_id from public.conversations where id = current_setting('test.g')::uuid$$,
   $$values ('group'::text, '饭友'::text, '11111111-1111-4111-8111-111111111111'::uuid)$$, '群：group、群名去掉首尾空格、owner_id = A');
 select results_eq($$select user_id, role from public.conversation_members where conversation_id = current_setting('test.g')::uuid order by user_id$$,
