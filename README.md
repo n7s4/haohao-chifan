@@ -4,6 +4,12 @@
 
 用 Expo / React Native 写的 Android 应用（iOS 代码同样可以跑），后端是 Supabase。本地优先：不登录也能完整使用，登录后数据在多台设备间同步。
 
+## 下载
+
+Android 安装包：[haohao-chifan-1.0.0.apk](https://github.com/n7s4/haohao-chifan/releases/latest/download/haohao-chifan-1.0.0.apk)（[所有版本](https://github.com/n7s4/haohao-chifan/releases)）
+
+下载后直接安装。如果手机拦截"未知来源"，在设置里允许浏览器或文件管理器安装应用。装好之后，新版本会通过热更新自动推送，下次打开 App 时生效。
+
 ## 功能
 
 ### 找菜、做菜
