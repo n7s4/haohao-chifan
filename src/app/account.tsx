@@ -210,7 +210,7 @@ export default function AccountScreen() {
             icon={<UserIcon size={19} color={colors.danger} />}
             tint={colors.accentSoft}
             label="黑名单"
-            sub="被拉黑的人看不到你的动态，也无法关注你"
+            sub="你不会再看到 Ta 的内容，你们也无法互相关注"
             onPress={() => router.push("/blocked")}
           />
           <Row

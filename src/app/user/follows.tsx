@@ -44,6 +44,8 @@ export default function FollowsScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [profiles, setProfiles] = useState<Map<string, PublicProfile>>(new Map());
   const [relations, setRelations] = useState<Map<string, FollowState>>(new Map());
+  /** 关系没读出来的人：不显示关注按钮（避免一直转圈），点进主页可以重试。 */
+  const [relationFailed, setRelationFailed] = useState<ReadonlySet<string>>(new Set());
   const generation = useRef(0);
   const busy = useRef(false);
 
@@ -60,6 +62,7 @@ export default function FollowsScreen() {
       if (gen !== generation.current) return;
       if (p?.ok) setProfiles((prev) => new Map([...prev, ...p.value]));
       if (rel?.ok) setRelations((prev) => new Map([...prev, ...rel.value]));
+      else if (userId) setRelationFailed((prev) => new Set([...prev, ...ids]));
     },
     [userId]
   );
@@ -167,7 +170,7 @@ export default function FollowsScreen() {
               <Pressable onPress={() => router.push(`/user/${item.userId}`)} style={styles.row} accessibilityRole="button" accessibilityLabel={`查看 ${name} 的主页`}>
                 <Avatar uri={p?.avatarUrl ?? null} name={name} size={44} />
                 <AppText size={15} weight="700" numberOfLines={1} style={styles.rowName}>{name}</AppText>
-                {item.userId === userId ? null : (
+                {item.userId === userId || (relationFailed.has(item.userId) && !relations.has(item.userId)) ? null : (
                   <FollowButton
                     size="sm"
                     targetId={item.userId}

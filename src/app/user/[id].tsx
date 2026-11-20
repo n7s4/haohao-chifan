@@ -64,6 +64,8 @@ export default function UserScreen() {
   const [profile, setProfile] = useState<PublicProfile | null | undefined>(undefined);
   const [stats, setStats] = useState<Stats | null>(null);
   const [relation, setRelation] = useState<FollowState | undefined>(undefined);
+  const [statsFailed, setStatsFailed] = useState(false);
+  const [statsTry, setStatsTry] = useState(0);
   const [recipes, setRecipes] = useState<CommunityRecipe[] | "error" | undefined>(undefined);
   const [coverFailed, setCoverFailed] = useState<Record<string, boolean>>({});
   const [menuOpen, setMenuOpen] = useState(false);
@@ -85,21 +87,32 @@ export default function UserScreen() {
         if (alive) setRecipes(r.ok ? r.value : "error");
       })
       .catch(() => alive && setRecipes("error"));
-    // 关注数 / 关系只对登录用户开放。
-    if (userId) {
-      getSocialStats(client, id)
-        .then((r) => {
-          if (!alive || !r.ok) return;
-          const at = followState(r.value.iFollow, r.value.followsMe);
-          setStats({ following: r.value.following, followers: r.value.followers, at });
-          setRelation(at);
-        })
-        .catch(() => {});
-    }
     return () => {
       alive = false;
     };
-  }, [authReady, id, userId]);
+  }, [authReady, id]);
+
+  // 关注数 / 关系只对登录用户开放；失败时给重试入口（statsTry 变化即重新拉取）。
+  useEffect(() => {
+    if (!authReady || !id || !userId) return;
+    let alive = true;
+    getSocialStats(getSupabase(), id)
+      .then((r) => {
+        if (!alive) return;
+        if (!r.ok) {
+          setStatsFailed(true);
+          return;
+        }
+        const at = followState(r.value.iFollow, r.value.followsMe);
+        setStatsFailed(false);
+        setStats({ following: r.value.following, followers: r.value.followers, at });
+        setRelation(at);
+      })
+      .catch(() => alive && setStatsFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [authReady, id, userId, statsTry]);
 
   const nickname = isMe
     ? (community.profile?.nickname ?? profile?.nickname ?? FALLBACK_NICKNAME)
@@ -206,6 +219,17 @@ export default function UserScreen() {
             ) : isBlocked ? (
               <Pressable onPress={doUnblock} style={styles.ghostBtn} accessibilityRole="button">
                 <AppText size={14} weight="700">解除拉黑</AppText>
+              </Pressable>
+            ) : userId && statsFailed && relation === undefined ? (
+              <Pressable
+                onPress={() => {
+                  setStatsFailed(false);
+                  setStatsTry((n) => n + 1);
+                }}
+                style={styles.ghostBtn}
+                accessibilityRole="button"
+              >
+                <AppText size={14} weight="700">没加载出来，点此重试</AppText>
               </Pressable>
             ) : (
               <FollowButton targetId={id} state={userId ? relation : "none"} onChange={setRelation} toast={showText} />
