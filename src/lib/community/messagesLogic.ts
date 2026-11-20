@@ -72,6 +72,55 @@ export function strangerHint(o: {
   return o.kind === "direct" && !o.peerHasSent && !o.peerFollowsMe && o.mySent >= 1;
 }
 
+/** 聊天页时间分隔：和上一条相隔这么久就显示时间。 */
+export const TIME_GAP_MS = 5 * 60_000;
+
+/** 聊天页里这条消息上方要不要显示时间：第一条总显示，和上一条相隔 ≥ 5 分钟也显示。 */
+export function needsTimeSeparator(prev: ChatMessage | undefined, cur: ChatMessage): boolean {
+  if (!prev) return true;
+  return Date.parse(cur.createdAt) - Date.parse(prev.createdAt) >= TIME_GAP_MS;
+}
+
+/**
+ * 聊天页输入框上方的陌生人提示。对方在本会话发过任何一条就不再限制，不显示；
+ * 上一次发送被 stranger_limit 拒绝就显示；否则只有全部历史都已加载、且知道对方是否关注我时，
+ * 才按本地数据走 strangerHint（pending / failed 不算我发过）。
+ */
+export function showStrangerHint(o: {
+  kind: "direct" | "group";
+  me: string;
+  peerId: string | null;
+  /** undefined：关注关系没取到。 */
+  peerFollowsMe: boolean | undefined;
+  messages: ChatMessage[];
+  allLoaded: boolean;
+  rejected: boolean;
+}): boolean {
+  if (o.kind !== "direct") return false;
+  const peerHasSent = o.peerId !== null && o.messages.some((m) => m.senderId === o.peerId);
+  if (peerHasSent) return false;
+  if (o.rejected) return true;
+  if (!o.allLoaded || o.peerFollowsMe === undefined) return false;
+  const mySent = o.messages.filter((m) => m.senderId === o.me && !m.pending && !m.failed).length;
+  return strangerHint({ kind: o.kind, peerFollowsMe: o.peerFollowsMe, peerHasSent, mySent });
+}
+
+/**
+ * 回到前台时把最新一页并进来。整页都是新消息、和本地已发消息没有重叠时，中间可能断档：
+ * 丢掉本地旧的已发消息（保留 pending / failed），reset = true，调用方要重新允许往前翻页。
+ */
+export function mergeLatestPage(
+  existing: ChatMessage[],
+  page: ChatMessage[],
+  pageSize: number,
+): { messages: ChatMessage[]; reset: boolean } {
+  const local = existing.filter((m) => m.pending || m.failed);
+  const sent = existing.filter((m) => !m.pending && !m.failed);
+  const ids = new Set(sent.map((m) => m.id));
+  const gap = page.length >= pageSize && sent.length > 0 && !page.some((m) => ids.has(m.id));
+  return gap ? { messages: mergeMessages(local, page), reset: true } : { messages: mergeMessages(existing, page), reset: false };
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const hhmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();

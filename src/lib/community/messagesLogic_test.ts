@@ -4,8 +4,11 @@ import {
   type ChatMessage,
   dbReason,
   formatChatTime,
+  mergeLatestPage,
   mergeMessages,
+  needsTimeSeparator,
   newMessageId,
+  showStrangerHint,
   strangerHint,
   totalUnread,
   validateBody,
@@ -95,4 +98,94 @@ Deno.test("newMessageId：uuid v4 格式且不重复", () => {
   const ids = Array.from({ length: 500 }, () => newMessageId());
   for (const id of ids) assertEquals(re.test(id), true, id);
   assertEquals(new Set(ids).size, ids.length);
+});
+
+
+// ---------------------------------------------------------------- 聊天页
+
+Deno.test("needsTimeSeparator：第一条总显示；相隔 ≥ 5 分钟才显示", () => {
+  const a = msg("a", "2026-01-01T00:00:00Z");
+  assertEquals(needsTimeSeparator(undefined, a), true);
+  assertEquals(needsTimeSeparator(a, msg("b", "2026-01-01T00:04:59Z")), false);
+  assertEquals(needsTimeSeparator(a, msg("b", "2026-01-01T00:05:00Z")), true);
+  assertEquals(needsTimeSeparator(a, msg("b", "2026-01-01T01:00:00Z")), true);
+});
+
+const hintBase = {
+  kind: "direct" as const,
+  me: "me",
+  peerId: "peer",
+  peerFollowsMe: false as boolean | undefined,
+  messages: [msg("a", "2026-01-01T00:00:00Z", { senderId: "me" })],
+  allLoaded: true,
+  rejected: false,
+};
+
+Deno.test("showStrangerHint：全部历史已加载、对方没发过没关注、我发过 1 条 → 显示", () => {
+  assertEquals(showStrangerHint(hintBase), true);
+});
+
+Deno.test("showStrangerHint：群聊永不显示", () => {
+  assertEquals(showStrangerHint({ ...hintBase, kind: "group" }), false);
+  assertEquals(showStrangerHint({ ...hintBase, kind: "group", rejected: true }), false);
+});
+
+Deno.test("showStrangerHint：对方关注我 / 关注状态未知 → 不按本地判断", () => {
+  assertEquals(showStrangerHint({ ...hintBase, peerFollowsMe: true }), false);
+  assertEquals(showStrangerHint({ ...hintBase, peerFollowsMe: undefined }), false);
+});
+
+Deno.test("showStrangerHint：历史没加载完不按本地判断", () => {
+  assertEquals(showStrangerHint({ ...hintBase, allLoaded: false }), false);
+});
+
+Deno.test("showStrangerHint：我还没发 / 只有 pending、failed 不算发过", () => {
+  assertEquals(showStrangerHint({ ...hintBase, messages: [] }), false);
+  assertEquals(
+    showStrangerHint({
+      ...hintBase,
+      messages: [
+        msg("a", "2026-01-01T00:00:00Z", { senderId: "me", pending: true }),
+        msg("b", "2026-01-01T00:00:01Z", { senderId: "me", failed: true }),
+      ],
+    }),
+    false,
+  );
+});
+
+Deno.test("showStrangerHint：对方发过任何一条就永不显示，哪怕上次被拒", () => {
+  const messages = [...hintBase.messages, msg("p", "2026-01-01T00:01:00Z", { senderId: "peer" })];
+  assertEquals(showStrangerHint({ ...hintBase, messages }), false);
+  assertEquals(showStrangerHint({ ...hintBase, messages, rejected: true }), false);
+});
+
+Deno.test("showStrangerHint：上次发送被 stranger_limit 拒绝 → 不管加载和关注状态都显示", () => {
+  assertEquals(showStrangerHint({ ...hintBase, rejected: true, allLoaded: false, peerFollowsMe: undefined }), true);
+  assertEquals(showStrangerHint({ ...hintBase, rejected: true, peerFollowsMe: true }), true);
+});
+
+Deno.test("mergeLatestPage：和已有消息有重叠 → 普通合并", () => {
+  const existing = [msg("a", "2026-01-01T00:00:01Z"), msg("b", "2026-01-01T00:00:02Z")];
+  const page = [msg("b", "2026-01-01T00:00:02Z"), msg("c", "2026-01-01T00:00:03Z")];
+  assertEquals(mergeLatestPage(existing, page, 2), { messages: mergeMessages(existing, page), reset: false });
+});
+
+Deno.test("mergeLatestPage：整页都比已有的新且没重叠 → 中间可能有断档，丢掉旧的已发消息，保留 pending / failed", () => {
+  const pending = msg("p", "2026-01-01T00:00:02Z", { pending: true });
+  const failed = msg("f", "2026-01-01T00:00:03Z", { failed: true });
+  const existing = [msg("a", "2026-01-01T00:00:01Z"), pending, failed];
+  const page = [msg("x", "2026-01-01T01:00:00Z"), msg("y", "2026-01-01T01:00:01Z")];
+  assertEquals(mergeLatestPage(existing, page, 2), { messages: mergeMessages([pending, failed], page), reset: true });
+});
+
+Deno.test("mergeLatestPage：没满一页说明拿到了全部新消息，不会断档", () => {
+  const existing = [msg("a", "2026-01-01T00:00:01Z")];
+  const page = [msg("x", "2026-01-01T01:00:00Z")];
+  assertEquals(mergeLatestPage(existing, page, 2), { messages: mergeMessages(existing, page), reset: false });
+});
+
+Deno.test("mergeLatestPage：本地还没有已发消息 → 普通合并", () => {
+  const pending = msg("p", "2026-01-01T00:00:02Z", { pending: true });
+  const page = [msg("x", "2026-01-01T01:00:00Z"), msg("y", "2026-01-01T01:00:01Z")];
+  assertEquals(mergeLatestPage([pending], page, 2), { messages: mergeMessages([pending], page), reset: false });
 });
