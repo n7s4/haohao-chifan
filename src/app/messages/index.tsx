@@ -153,11 +153,7 @@ export default function MessagesScreen() {
             const title = isGroup ? (item.name ?? "群聊") : (peer?.nickname ?? FALLBACK_NICKNAME);
             return (
               <Pressable
-                onPress={() =>
-                  isGroup
-                    ? router.push({ pathname: "/messages/group/[id]", params: { id: item.id } })
-                    : router.push({ pathname: "/messages/[id]", params: { id: item.id } })
-                }
+                onPress={() => router.push({ pathname: "/messages/[id]", params: { id: item.id } })}
                 style={styles.row}
                 accessibilityRole="button"
               >
