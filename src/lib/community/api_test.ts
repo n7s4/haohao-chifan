@@ -40,6 +40,23 @@ import {
   unblock,
   unfollow,
 } from "./social.ts";
+import {
+  createGroup,
+  getConversation,
+  inviteMembers,
+  leaveConversation,
+  listConversations,
+  listMembers,
+  listMessages,
+  listMutuals,
+  markRead,
+  openDirect,
+  removeMember,
+  renameGroup,
+  sendMessage,
+  subscribeMessages,
+} from "./messages.ts";
+import { newMessageId } from "./messagesLogic.ts";
 
 // npm run test:unit 不带 --allow-env：没有权限就当作未开启，不报错。
 const canReadEnv = Deno.permissions.querySync({ name: "env" }).state === "granted";
@@ -352,6 +369,158 @@ Deno.test({
       assert(recipes.ok);
       assertEquals(recipes.value, []);
     } finally {
+      await admin.auth.admin.deleteUser(a.id);
+      await admin.auth.admin.deleteUser(b.id);
+    }
+  },
+});
+
+Deno.test({
+  name: "messages api: direct / unread / group / owner handover / block",
+  ignore: !enabled,
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn: async () => {
+    assert(anonKey && serviceKey, "SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY 未设置");
+    const admin = createClient(url, serviceKey, noSession);
+    const [a, b, c, d] = [
+      await makeUser(admin, "ma"),
+      await makeUser(admin, "mb"),
+      await makeUser(admin, "mc"),
+      await makeUser(admin, "md"),
+    ];
+    const mutual = async (x: typeof a, y: typeof a) => {
+      assert((await follow(x.client, x.id, y.id)).ok);
+      assert((await follow(y.client, y.id, x.id)).ok);
+    };
+    try {
+      await mutual(a, b);
+      await mutual(a, c);
+      await mutual(b, d);
+      const mutuals = await listMutuals(a.client, a.id);
+      assert(mutuals.ok);
+      assertEquals([...mutuals.value].sort(), [b.id, c.id].sort());
+
+      // 私信：A 开会话（重复开同一个）、发一条，B 未读 1，markRead 后 0
+      const dm = await openDirect(a.client, b.id);
+      assert(dm.ok, JSON.stringify(dm));
+      assertEquals(await openDirect(b.client, a.id), dm);
+      assertEquals(await openDirect(a.client, a.id), { ok: false, reason: "invalid" });
+      const clientId = newMessageId();
+      const sent = await sendMessage(a.client, a.id, dm.value, "  你好  ", clientId);
+      assert(sent.ok, JSON.stringify(sent));
+      assertEquals(sent.value.body, "你好");
+      assertEquals(sent.value.id, clientId);
+      assertEquals(sent.value.senderId, a.id);
+      const bList = await listConversations(b.client);
+      assert(bList.ok);
+      const bDm = bList.value.find((x) => x.id === dm.value);
+      assertEquals(bDm?.unread, 1);
+      assertEquals(bDm?.peerId, a.id);
+      assertEquals(bDm?.lastBody, "你好");
+      assert((await markRead(b.client, dm.value)).ok);
+      const bList2 = await listConversations(b.client);
+      assert(bList2.ok);
+      assertEquals(bList2.value.find((x) => x.id === dm.value)?.unread, 0);
+      const history = await listMessages(b.client, dm.value);
+      assert(history.ok);
+      assertEquals(history.value.map((m) => m.id), [sent.value.id]);
+      const older = await listMessages(b.client, dm.value, { createdAt: sent.value.createdAt, id: sent.value.id });
+      assert(older.ok);
+      assertEquals(older.value, []);
+
+      // 群：A 拉 B、C；非互关的人拉不进
+      assertEquals(await createGroup(a.client, "饭搭子", [b.id, d.id]), { ok: false, reason: "not_mutual" });
+      const g = await createGroup(a.client, "饭搭子", [b.id, c.id]);
+      assert(g.ok, JSON.stringify(g));
+      const info = await getConversation(b.client, g.value);
+      assert(info.ok);
+      assertEquals(info.value, { id: g.value, kind: "group", name: "饭搭子", ownerId: a.id });
+      assert((await renameGroup(a.client, g.value, "吃饭群")).ok);
+      assertEquals(await renameGroup(b.client, g.value, "改名"), { ok: false, reason: "auth" });
+      // B 邀请自己的互关 D；A 不关注 D 也行（只要求邀请人与被邀请人互关）
+      assert((await inviteMembers(b.client, g.value, [d.id])).ok);
+      assertEquals(await inviteMembers(b.client, g.value, [crypto.randomUUID()]), { ok: false, reason: "not_mutual" });
+      const gMsg = await sendMessage(a.client, a.id, g.value, "群里好");
+      assert(gMsg.ok, JSON.stringify(gMsg));
+      const dRead = await listMessages(d.client, g.value);
+      assert(dRead.ok);
+      assertEquals(dRead.value.map((m) => m.id), [gMsg.value.id]);
+      // D 退群后读不到
+      assert((await leaveConversation(d.client, g.value)).ok);
+      const dAfter = await listMessages(d.client, g.value);
+      assert(dAfter.ok);
+      assertEquals(dAfter.value, []);
+
+      // A 退群 → 群主转给最早入群的成员（入群时间相同按 user_id）
+      const before = await listMembers(b.client, g.value);
+      assert(before.ok);
+      assertEquals(before.value.length, 3);
+      const heir = before.value.filter((m) => m.userId !== a.id)
+        .sort((x, y) => x.joinedAt.localeCompare(y.joinedAt) || x.userId.localeCompare(y.userId))[0].userId;
+      assert([b.id, c.id].includes(heir));
+      assert((await leaveConversation(a.client, g.value)).ok);
+      const info2 = await getConversation(b.client, g.value);
+      assert(info2.ok);
+      assertEquals(info2.value.ownerId, heir);
+      const owner = heir === b.id ? b : c;
+      const other = heir === b.id ? c : b;
+      // 群主移除另一人
+      assert((await removeMember(owner.client, g.value, other.id)).ok);
+      const after = await listMembers(owner.client, g.value);
+      assert(after.ok);
+      assertEquals(after.value.map((m) => [m.userId, m.role]), [[owner.id, "owner"]]);
+
+      // 举报消息：A 举报不了自己发的，B 可以举报 A 的
+      assertEquals(await report(a.client, a.id, { messageId: sent.value.id }, "ad"), { ok: false, reason: "unavailable" });
+      assert((await report(b.client, b.id, { messageId: sent.value.id }, "ad")).ok);
+
+      // A 拉黑 B 后，B 给 A 发消息 → unavailable
+      assert((await block(a.client, a.id, b.id)).ok);
+      assertEquals(await sendMessage(b.client, b.id, dm.value, "还在吗"), { ok: false, reason: "unavailable" });
+    } finally {
+      for (const u of [a, b, c, d]) await admin.auth.admin.deleteUser(u.id);
+    }
+  },
+});
+
+Deno.test({
+  name: "messages api: realtime INSERT reaches the other member",
+  ignore: !enabled,
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn: async () => {
+    assert(anonKey && serviceKey, "SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY 未设置");
+    const admin = createClient(url, serviceKey, noSession);
+    const a = await makeUser(admin, "ra");
+    const b = await makeUser(admin, "rb");
+    let stop: (() => void) | null = null;
+    try {
+      assert((await follow(a.client, a.id, b.id)).ok);
+      assert((await follow(b.client, b.id, a.id)).ok);
+      const dm = await openDirect(a.client, b.id);
+      assert(dm.ok, JSON.stringify(dm));
+
+      const got = Promise.withResolvers<{ id: string; body: string }>();
+      const subscribed = Promise.withResolvers<void>();
+      stop = subscribeMessages(b.client, { conversationId: dm.value }, (m) => got.resolve(m), (s) => {
+        if (s === "SUBSCRIBED") subscribed.resolve();
+        else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") subscribed.reject(new Error(`订阅失败：${s}`));
+      });
+      await subscribed.promise;
+      // SUBSCRIBED 之后 Realtime 还要一瞬间才把变更流接上，立刻发会漏。
+      await new Promise((r) => setTimeout(r, 1000));
+
+      const sent = await sendMessage(a.client, a.id, dm.value, "实时消息");
+      assert(sent.ok, JSON.stringify(sent));
+      const timer = setTimeout(() => got.reject(new Error("5 秒内没收到实时消息")), 5000);
+      const m = await got.promise;
+      clearTimeout(timer);
+      assertEquals(m.id, sent.value.id);
+      assertEquals(m.body, "实时消息");
+    } finally {
+      stop?.();
+      await b.client.removeAllChannels();
       await admin.auth.admin.deleteUser(a.id);
       await admin.auth.admin.deleteUser(b.id);
     }

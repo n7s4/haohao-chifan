@@ -11,6 +11,7 @@ import { colors } from "../theme";
 import { GuestMergePrompt } from "../components/GuestMergePrompt";
 import { notificationsSupported } from "../lib/cookNotify";
 import { BlocksProvider } from "../lib/community/useBlocks";
+import { UnreadProvider } from "../lib/community/useUnread";
 import { CommunityProfileProvider } from "../lib/community/useCommunityProfile";
 import { StoreProvider } from "../state/store";
 
@@ -54,6 +55,7 @@ export default function RootLayout() {
           <StoreProvider>
             <CommunityProfileProvider>
             <BlocksProvider>
+            <UnreadProvider>
               <StatusBar style="dark" />
               <GuestMergePrompt />
               <Stack
@@ -77,7 +79,12 @@ export default function RootLayout() {
                 <Stack.Screen name="user/[id]" />
                 <Stack.Screen name="user/follows" />
                 <Stack.Screen name="blocked" />
+                <Stack.Screen name="messages/index" />
+                <Stack.Screen name="messages/[id]" />
+                <Stack.Screen name="messages/new-group" />
+                <Stack.Screen name="messages/group/[id]" />
               </Stack>
+            </UnreadProvider>
             </BlocksProvider>
             </CommunityProfileProvider>
           </StoreProvider>

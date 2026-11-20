@@ -19,7 +19,15 @@ import {
   validateNickname,
 } from "./logic";
 
-export type FailReason = "unavailable" | "network" | "auth" | "invalid";
+export type FailReason =
+  | "unavailable"
+  | "network"
+  | "auth"
+  | "invalid"
+  | "stranger_limit"
+  | "rate_limited"
+  | "group_full"
+  | "not_mutual";
 export type Result<T> = { ok: true; value: T } | { ok: false; reason: FailReason };
 export type ReportReason = "ad" | "unfriendly" | "irrelevant" | "other";
 export type PublicProfile = { nickname: string; avatarUrl: string | null };
@@ -339,7 +347,7 @@ export async function deleteComment(client: SupabaseClient, commentId: string): 
 export async function report(
   client: SupabaseClient,
   userId: string,
-  target: { recipeId: string } | { commentId: string } | { userId: string },
+  target: { recipeId: string } | { commentId: string } | { userId: string } | { messageId: string },
   reason: ReportReason,
 ): Promise<Result<void>> {
   const { error, status } = await client.from("community_reports").insert({
@@ -349,7 +357,9 @@ export async function report(
       ? { community_recipe_id: target.recipeId }
       : "commentId" in target
         ? { comment_id: target.commentId }
-        : { reported_user_id: target.userId }),
+        : "messageId" in target
+          ? { message_id: target.messageId }
+          : { reported_user_id: target.userId }),
   });
   if (!error || error.code === "23505") return okVoid;
   return fail(reasonOf(error, status));

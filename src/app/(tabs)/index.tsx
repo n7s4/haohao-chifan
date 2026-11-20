@@ -58,6 +58,9 @@ import { CookSession, loadAnyCookSession } from "../../lib/cookSession";
 import { useRecipeCoverUris } from "../../lib/useMedia";
 import { toKey, useStore } from "../../state/store";
 import { colors, motion, radius, shadow, spacing } from "../../theme";
+import { useUnread } from "../../lib/community/useUnread";
+import { useAuth } from "../../lib/useAuth";
+import { ChatIcon } from "../../components/Icons";
 
 const PAD = 20;
 const GAP = 12;
@@ -91,6 +94,8 @@ export default function DiscoverScreen() {
   const { favorites, toggleFavorite, allRecipes, findRecipe, plan, setMeal } = useStore();
   const coverUris = useRecipeCoverUris(allRecipes);
   const { toast, show, undo } = useToast();
+  const { userId: authUserId } = useAuth();
+  const unread = useUnread();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState(0);
   const [mode, setMode] = useState<"recipes" | "community">("community");
@@ -201,6 +206,20 @@ export default function DiscoverScreen() {
           </Pressable>
         );
       })}
+      {mode === "community" ? (
+        <>
+          <View style={{ flex: 1 }} />
+          <Pressable
+            onPress={() => router.push(authUserId ? "/messages" : "/sign-in")}
+            style={styles.msgBtn}
+            accessibilityRole="button"
+            accessibilityLabel="消息"
+          >
+            <ChatIcon size={20} color={colors.ink} />
+            {authUserId && unread.total > 0 ? <View style={styles.msgDot} /> : null}
+          </Pressable>
+        </>
+      ) : null}
     </View>
   );
 
@@ -592,6 +611,17 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 15, color: colors.ink, paddingVertical: 0 },
   modeTabs: { flexDirection: "row", gap: 8, paddingHorizontal: PAD, paddingTop: spacing.lg },
+  msgBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  msgDot: { position: "absolute", top: 7, right: 8, width: 9, height: 9, borderRadius: 5, backgroundColor: colors.accent },
   pane: { flex: 1 },
   hidden: { display: "none" },
   chips: { gap: 8, paddingHorizontal: PAD, paddingTop: 14 },
