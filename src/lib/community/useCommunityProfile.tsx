@@ -37,8 +37,16 @@ const CommunityProfileContext = createContext<Ctx>({
 
 export const useCommunityProfile = () => useContext(CommunityProfileContext);
 
-export const failMessage = (reason: FailReason): string =>
-  reason === "network" ? "网络不太好，稍后再试" : reason === "auth" ? "登录状态失效了，重新登录后再试" : "没保存成功，再试一次";
+const FAIL_MESSAGES: Partial<Record<FailReason, string>> = {
+  network: "网络不太好，稍后再试",
+  auth: "登录状态失效了，重新登录后再试",
+  stranger_limit: "对方回复或关注你之前，只能发送 1 条消息",
+  rate_limited: "发得太快了，歇一会儿再发",
+  group_full: "群里已经满 50 人了",
+  not_mutual: "只能邀请互相关注的人",
+};
+
+export const failMessage = (reason: FailReason): string => FAIL_MESSAGES[reason] ?? "没保存成功，再试一次";
 
 export function CommunityProfileProvider({ children }: { children: React.ReactNode }) {
   const { userId } = useAuth();
