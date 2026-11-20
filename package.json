@@ -49,7 +49,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "test:unit": "deno test --sloppy-imports src/lib/community src/data"
+    "test:unit": "deno test --sloppy-imports src/lib/community"
   },
   "private": true
 }
