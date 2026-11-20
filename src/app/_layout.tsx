@@ -10,6 +10,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { colors } from "../theme";
 import { GuestMergePrompt } from "../components/GuestMergePrompt";
 import { notificationsSupported } from "../lib/cookNotify";
+import { BlocksProvider } from "../lib/community/useBlocks";
 import { CommunityProfileProvider } from "../lib/community/useCommunityProfile";
 import { StoreProvider } from "../state/store";
 
@@ -52,6 +53,7 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <StoreProvider>
             <CommunityProfileProvider>
+            <BlocksProvider>
               <StatusBar style="dark" />
               <GuestMergePrompt />
               <Stack
@@ -72,7 +74,11 @@ export default function RootLayout() {
                 <Stack.Screen name="create-recipe" options={{ presentation: "modal" }} />
                 <Stack.Screen name="account" />
                 <Stack.Screen name="fat-loss" />
+                <Stack.Screen name="user/[id]" />
+                <Stack.Screen name="user/follows" />
+                <Stack.Screen name="blocked" />
               </Stack>
+            </BlocksProvider>
             </CommunityProfileProvider>
           </StoreProvider>
         </SafeAreaProvider>

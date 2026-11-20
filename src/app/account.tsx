@@ -207,6 +207,13 @@ export default function AccountScreen() {
             onPress={openNickname}
           />
           <Row
+            icon={<UserIcon size={19} color={colors.danger} />}
+            tint={colors.accentSoft}
+            label="黑名单"
+            sub="你不会再看到 Ta 的内容，你们也无法互相关注"
+            onPress={() => router.push("/blocked")}
+          />
+          <Row
             icon={<LockIcon size={19} color={colors.ink} />}
             tint={colors.skySoft}
             label="修改密码"

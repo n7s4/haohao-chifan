@@ -14,6 +14,8 @@ import {
 
 import { listCommunity } from "../../lib/community/api";
 import { type CommunityRecipe, mergeFeedPage } from "../../lib/community/logic";
+import { hideBlocked } from "../../lib/community/socialLogic";
+import { useBlocks } from "../../lib/community/useBlocks";
 import { getSupabase } from "../../lib/supabase";
 import { colors, radius, spacing } from "../../theme";
 import { AppText } from "../Common";
@@ -35,6 +37,8 @@ export function CommunityFeed({ header, bottomPad = 0 }: { header?: React.ReactN
   const columnWidth = Math.floor((width - PAD * 2 - GAP) / 2);
   const [sort, setSort] = useState<Sort>("latest");
   const [items, setItems] = useState<CommunityRecipe[]>([]);
+  const { blocked } = useBlocks();
+  const visible = useMemo(() => hideBlocked(items, blocked, (cr) => cr.authorId), [items, blocked]);
   const [hasMore, setHasMore] = useState(true);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [refreshing, setRefreshing] = useState(false);
@@ -140,12 +144,12 @@ export function CommunityFeed({ header, bottomPad = 0 }: { header?: React.ReactN
   };
 
   const columns = useMemo(() => {
-    const measured = items.map((cr, index) => ({
+    const measured = visible.map((cr, index) => ({
       cr,
       height: coverHeightFor(cr.recipe.cover, index, columnWidth, 130, 220),
     }));
     return splitColumns(measured, (item) => item.height + 22 + 38 + 30 + GAP, GAP);
-  }, [items, columnWidth]);
+  }, [visible, columnWidth]);
 
   return (
     <ScrollView
@@ -190,7 +194,7 @@ export function CommunityFeed({ header, bottomPad = 0 }: { header?: React.ReactN
             <AppText size={14} weight="700" color={colors.white}>重试</AppText>
           </Pressable>
         </View>
-      ) : items.length === 0 ? (
+      ) : visible.length === 0 ? (
         <View style={styles.center}>
           <AppText size={14} color={colors.muted} style={{ textAlign: "center" }}>
             社区还没有菜，去发布第一道吧

@@ -1,8 +1,8 @@
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Keyboard,
   Modal,
   Platform,
@@ -19,6 +19,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { AppText, usePressScale } from "../Common";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { CloseIcon } from "../Icons";
+import { Avatar } from "./Avatar";
 import { ActionSheet, ReportSheet, type SheetAction } from "./ReportSheet";
 import {
   addComment,
@@ -41,6 +42,8 @@ import {
   threadComments,
   validateCommentBody,
 } from "../../lib/community/logic";
+import { hideBlocked } from "../../lib/community/socialLogic";
+import { useBlocks } from "../../lib/community/useBlocks";
 import { failMessage, useCommunityProfile } from "../../lib/community/useCommunityProfile";
 import { getSupabase } from "../../lib/supabase";
 import { colors, motion, radius, shadow, spacing } from "../../theme";
@@ -97,6 +100,7 @@ export function Comments({
   onCountChange: (delta: number) => void;
   toast: (text: string) => void;
 }) {
+  const { blocked } = useBlocks();
   const { ensure, profile: myProfile } = useCommunityProfile();
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -299,7 +303,7 @@ export function Comments({
     toast(failMessage(r.reason));
   };
 
-  const threads = load.status === "ready" ? threadComments(load.rows) : [];
+  const threads = load.status === "ready" ? threadComments(hideBlocked(load.rows, blocked, (r) => r.userId)) : [];
   const now = new Date();
 
   return (
@@ -430,6 +434,9 @@ function CommentItem({
   onReply: () => void;
   onLongPress: () => void;
 }) {
+  const openUser = () => {
+    if (comment.userId) router.push(`/user/${comment.userId}`);
+  };
   return (
     <Pressable
       onPress={onReply}
@@ -438,17 +445,29 @@ function CommentItem({
       style={({ pressed }) => [styles.item, pressed && { opacity: 0.85 }]}
       accessibilityHint="点按回复，长按可删除或举报"
     >
-      <Avatar uri={profile?.avatarUrl ?? null} name={nickname} size={small ? 26 : 34} />
+      <Pressable
+        onPress={openUser}
+        disabled={!comment.userId}
+        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel={`查看 ${nickname} 的主页`}
+      >
+        <Avatar uri={profile?.avatarUrl ?? null} name={nickname} size={small ? 26 : 34} />
+      </Pressable>
       <View style={{ flex: 1 }}>
-        <AppText size={13} weight="700" color={colors.muted} numberOfLines={1}>
-          {nickname}
+        <View style={styles.nameRow}>
+          <Pressable onPress={openUser} disabled={!comment.userId} hitSlop={6} style={styles.nameHit}>
+            <AppText size={13} weight="700" color={colors.muted} numberOfLines={1}>
+              {nickname}
+            </AppText>
+          </Pressable>
           {replyToNickname ? (
-            <AppText size={13} weight="400" color={colors.placeholder}>
+            <AppText size={13} weight="400" color={colors.placeholder} numberOfLines={1} style={styles.replyTo}>
               {" 回复 "}
               <AppText size={13} weight="700" color={colors.muted}>@{replyToNickname}</AppText>
             </AppText>
           ) : null}
-        </AppText>
+        </View>
         <AppText size={15} style={styles.body}>
           {comment.body}
         </AppText>
@@ -460,21 +479,6 @@ function CommentItem({
         </View>
       </View>
     </Pressable>
-  );
-}
-
-function Avatar({ uri, name, size }: { uri: string | null; name: string; size: number }) {
-  const [failed, setFailed] = useState(false);
-  const box = { width: size, height: size, borderRadius: size / 2 };
-  if (uri && !failed) {
-    return <Image alt={name} source={{ uri }} style={[styles.avatar, box]} onError={() => setFailed(true)} />;
-  }
-  return (
-    <View style={[styles.avatar, styles.avatarFallback, box]}>
-      <AppText size={Math.round(size * 0.42)} weight="800" color={colors.accentText}>
-        {Array.from(name)[0] ?? ""}
-      </AppText>
-    </View>
   );
 }
 
@@ -614,6 +618,9 @@ function SendIcon({ color = colors.white, size = 18 }: { color?: string; size?: 
 }
 
 const styles = StyleSheet.create({
+  nameRow: { flexDirection: "row", alignItems: "center" },
+  nameHit: { flexShrink: 1 },
+  replyTo: { flexShrink: 1 },
   entry: {
     marginTop: spacing.md,
     minHeight: 44,
@@ -636,8 +643,6 @@ const styles = StyleSheet.create({
   deletedRow: { paddingVertical: spacing.sm },
   replies: { marginLeft: 44, marginTop: 2 },
   item: { flexDirection: "row", gap: 10, paddingVertical: 6 },
-  avatar: { backgroundColor: colors.surfaceAlt },
-  avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: colors.accentSoft },
   body: { marginTop: 2, lineHeight: 22 },
   meta: { flexDirection: "row", alignItems: "center", gap: spacing.lg, marginTop: 4 },
 
