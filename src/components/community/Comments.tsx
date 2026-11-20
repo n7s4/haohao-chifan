@@ -41,6 +41,8 @@ import {
   threadComments,
   validateCommentBody,
 } from "../../lib/community/logic";
+import { hideBlocked } from "../../lib/community/socialLogic";
+import { useBlocks } from "../../lib/community/useBlocks";
 import { failMessage, useCommunityProfile } from "../../lib/community/useCommunityProfile";
 import { getSupabase } from "../../lib/supabase";
 import { colors, motion, radius, shadow, spacing } from "../../theme";
@@ -97,6 +99,7 @@ export function Comments({
   onCountChange: (delta: number) => void;
   toast: (text: string) => void;
 }) {
+  const { blocked } = useBlocks();
   const { ensure, profile: myProfile } = useCommunityProfile();
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -299,7 +302,7 @@ export function Comments({
     toast(failMessage(r.reason));
   };
 
-  const threads = load.status === "ready" ? threadComments(load.rows) : [];
+  const threads = load.status === "ready" ? threadComments(hideBlocked(load.rows, blocked, (r) => r.userId)) : [];
   const now = new Date();
 
   return (
