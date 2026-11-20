@@ -138,3 +138,37 @@ export function formatChatTime(iso: string, now: Date): string {
 export const totalUnread = (list: { unread: number }[]): number => list.reduce((s, c) => s + c.unread, 0);
 
 export const badgeText = (n: number): string => (n > 99 ? "99+" : String(n));
+
+export const GROUP_NAME_MAX = 30;
+export const GROUP_MAX_MEMBERS = 50;
+/** 建群除自己外至少要选的人数。 */
+export const GROUP_MIN_OTHERS = 2;
+
+const cut = (s: string, n: number) => Array.from(s).slice(0, n).join("");
+
+/** 默认群名：前 3 个昵称用「、」拼接，截到 30 字（按字符，和数据库 char_length 一致）。 */
+export function defaultGroupName(nicknames: string[]): string {
+  return cut(nicknames.slice(0, 3).join("、"), GROUP_NAME_MAX);
+}
+
+/** 去掉首尾空白后 1–30 字返回结果，否则 null。 */
+export function validateGroupName(text: string): string | null {
+  const t = text.trim();
+  const n = Array.from(t).length;
+  return n >= 1 && n <= GROUP_NAME_MAX ? t : null;
+}
+
+/** 多选：已选就取消，否则追加到末尾。 */
+export const toggleSelected = (selected: string[], id: string): string[] =>
+  selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+
+/** 建群：除自己外至少 2 人，加上自己不超过 50。 */
+export const canCreateGroup = (others: number): boolean =>
+  others >= GROUP_MIN_OTHERS && others + 1 <= GROUP_MAX_MEMBERS;
+
+/** 可选的互关：去掉我拉黑的和已经在群里的。 */
+export const pickableMutuals = (
+  mutuals: string[],
+  blocked: ReadonlySet<string>,
+  inGroup: ReadonlySet<string> = new Set(),
+): string[] => mutuals.filter((id) => !blocked.has(id) && !inGroup.has(id));

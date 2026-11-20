@@ -2,16 +2,21 @@ import { assertEquals } from "jsr:@std/assert";
 import {
   badgeText,
   type ChatMessage,
+  canCreateGroup,
   dbReason,
+  defaultGroupName,
   formatChatTime,
   mergeLatestPage,
   mergeMessages,
   needsTimeSeparator,
   newMessageId,
+  pickableMutuals,
   showStrangerHint,
   strangerHint,
   totalUnread,
+  toggleSelected,
   validateBody,
+  validateGroupName,
 } from "./messagesLogic.ts";
 
 const msg = (id: string, createdAt: string, extra: Partial<ChatMessage> = {}): ChatMessage => ({
@@ -188,4 +193,37 @@ Deno.test("mergeLatestPage：本地还没有已发消息 → 普通合并", () =
   const pending = msg("p", "2026-01-01T00:00:02Z", { pending: true });
   const page = [msg("x", "2026-01-01T01:00:00Z"), msg("y", "2026-01-01T01:00:01Z")];
   assertEquals(mergeLatestPage([pending], page, 2), { messages: mergeMessages([pending], page), reset: false });
+});
+
+Deno.test("defaultGroupName: 前 3 个昵称用顿号拼接，截到 30 字", () => {
+  assertEquals(defaultGroupName(["小明", "小红", "小刚", "小李"]), "小明、小红、小刚");
+  assertEquals(defaultGroupName(["小明", "小红"]), "小明、小红");
+  assertEquals(defaultGroupName([]), "");
+  const long = defaultGroupName(["一".repeat(20), "二".repeat(20), "三"]);
+  assertEquals(Array.from(long).length, 30);
+  assertEquals(long.startsWith("一".repeat(20) + "、"), true);
+});
+
+Deno.test("validateGroupName: 去首尾空白后 1–30 字", () => {
+  assertEquals(validateGroupName("  饭搭子 "), "饭搭子");
+  assertEquals(validateGroupName("   "), null);
+  assertEquals(validateGroupName("一".repeat(30)), "一".repeat(30));
+  assertEquals(validateGroupName("一".repeat(31)), null);
+});
+
+Deno.test("toggleSelected: 加入 / 取消，保持选择顺序", () => {
+  assertEquals(toggleSelected(["a"], "b"), ["a", "b"]);
+  assertEquals(toggleSelected(["a", "b"], "a"), ["b"]);
+});
+
+Deno.test("canCreateGroup: 至少选 2 人，加上自己不超过 50", () => {
+  assertEquals(canCreateGroup(1), false);
+  assertEquals(canCreateGroup(2), true);
+  assertEquals(canCreateGroup(49), true);
+  assertEquals(canCreateGroup(50), false);
+});
+
+Deno.test("pickableMutuals: 去掉我拉黑的和已经在群里的", () => {
+  assertEquals(pickableMutuals(["a", "b", "c", "d"], new Set(["b"]), new Set(["c"])), ["a", "d"]);
+  assertEquals(pickableMutuals(["a"], new Set()), ["a"]);
 });
