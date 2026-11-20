@@ -5,6 +5,7 @@ import {
   dbReason,
   formatChatTime,
   mergeMessages,
+  newMessageId,
   strangerHint,
   totalUnread,
   validateBody,
@@ -87,4 +88,11 @@ Deno.test("totalUnread / badgeText", () => {
   assertEquals(badgeText(5), "5");
   assertEquals(badgeText(99), "99");
   assertEquals(badgeText(100), "99+");
+});
+
+Deno.test("newMessageId：uuid v4 格式且不重复", () => {
+  const re = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const ids = Array.from({ length: 500 }, () => newMessageId());
+  for (const id of ids) assertEquals(re.test(id), true, id);
+  assertEquals(new Set(ids).size, ids.length);
 });

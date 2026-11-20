@@ -9,6 +9,9 @@ import { type ChatMessage, dbReason } from "./messagesLogic";
 
 export const MESSAGES_PAGE = 40;
 
+// React Native 没有 crypto.randomUUID；channel 名只要在本进程内唯一。
+let channelSeq = 0;
+
 export type ConversationSummary = {
   id: string;
   kind: "direct" | "group";
@@ -114,9 +117,10 @@ export async function sendMessage(
   me: string,
   id: string,
   body: string,
+  messageId?: string,
 ): Promise<Result<ChatMessage>> {
   const { data, error, status } = await client.from("messages")
-    .insert({ conversation_id: id, sender_id: me, body }).select(MESSAGE_COLS).single();
+    .insert({ ...(messageId ? { id: messageId } : {}), conversation_id: id, sender_id: me, body: body.trim() }).select(MESSAGE_COLS).single();
   if (error) return failure(error, status);
   return data ? ok(rowToMessage(data)) : fail("unavailable");
 }
@@ -160,7 +164,7 @@ export function subscribeMessages(
   onInsert: (m: ChatMessage) => void,
   onStatus?: (status: string) => void,
 ): () => void {
-  const channel = client.channel(`messages-${filter.conversationId ?? "all"}-${crypto.randomUUID()}`)
+  const channel = client.channel(`messages-${filter.conversationId ?? "all"}-${Date.now()}-${++channelSeq}`)
     .on(
       "postgres_changes",
       {

@@ -56,6 +56,7 @@ import {
   sendMessage,
   subscribeMessages,
 } from "./messages.ts";
+import { newMessageId } from "./messagesLogic.ts";
 
 // npm run test:unit 不带 --allow-env：没有权限就当作未开启，不报错。
 const canReadEnv = Deno.permissions.querySync({ name: "env" }).state === "granted";
@@ -405,9 +406,11 @@ Deno.test({
       assert(dm.ok, JSON.stringify(dm));
       assertEquals(await openDirect(b.client, a.id), dm);
       assertEquals(await openDirect(a.client, a.id), { ok: false, reason: "invalid" });
-      const sent = await sendMessage(a.client, a.id, dm.value, "你好");
+      const clientId = newMessageId();
+      const sent = await sendMessage(a.client, a.id, dm.value, "  你好  ", clientId);
       assert(sent.ok, JSON.stringify(sent));
       assertEquals(sent.value.body, "你好");
+      assertEquals(sent.value.id, clientId);
       assertEquals(sent.value.senderId, a.id);
       const bList = await listConversations(b.client);
       assert(bList.ok);

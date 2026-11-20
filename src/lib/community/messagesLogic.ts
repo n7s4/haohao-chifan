@@ -24,6 +24,14 @@ export function mergeMessages(existing: ChatMessage[], incoming: ChatMessage[]):
   });
 }
 
+/** 客户端生成消息 id（uuid v4）：pending、insert 结果、实时回声共用同一个 id。React Native 没有 crypto.randomUUID，用 Math.random。 */
+export function newMessageId(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = Math.floor(Math.random() * 16);
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 export const MAX_BODY = 1000;
 
 /** 去掉首尾空白后 1–1000 字返回结果，否则 null。 */
