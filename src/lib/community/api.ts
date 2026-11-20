@@ -29,14 +29,14 @@ const PUBLIC_BUCKET = "community-media";
 const COPY_CONCURRENCY = 3;
 const TABLE = "community_recipes";
 
-const ok = <T>(value: T): Result<T> => ({ ok: true, value });
-const okVoid: Result<void> = { ok: true, value: undefined };
-const fail = <T>(reason: FailReason): Result<T> => ({ ok: false, reason });
+export const ok = <T>(value: T): Result<T> => ({ ok: true, value });
+export const okVoid: Result<void> = { ok: true, value: undefined };
+export const fail = <T>(reason: FailReason): Result<T> => ({ ok: false, reason });
 
-type AnyError = { code?: string; message?: string; name?: string; status?: number; statusCode?: string };
+export type AnyError = { code?: string; message?: string; name?: string; status?: number; statusCode?: string };
 
 /** PostgREST / Storage 的错误 → FailReason。status 0 是 postgrest-js 包装的 fetch 异常。 */
-function reasonOf(error: AnyError, status?: number): FailReason {
+export function reasonOf(error: AnyError, status?: number): FailReason {
   if (status === 0 || error.name === "StorageUnknownError" || /fetch|network/i.test(error.message ?? "")) {
     return "network";
   }
@@ -339,13 +339,17 @@ export async function deleteComment(client: SupabaseClient, commentId: string): 
 export async function report(
   client: SupabaseClient,
   userId: string,
-  target: { recipeId: string } | { commentId: string },
+  target: { recipeId: string } | { commentId: string } | { userId: string },
   reason: ReportReason,
 ): Promise<Result<void>> {
   const { error, status } = await client.from("community_reports").insert({
     reporter_id: userId,
     reason,
-    ...("recipeId" in target ? { community_recipe_id: target.recipeId } : { comment_id: target.commentId }),
+    ...("recipeId" in target
+      ? { community_recipe_id: target.recipeId }
+      : "commentId" in target
+        ? { comment_id: target.commentId }
+        : { reported_user_id: target.userId }),
   });
   if (!error || error.code === "23505") return okVoid;
   return fail(reasonOf(error, status));

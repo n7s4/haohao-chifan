@@ -29,6 +29,17 @@ import {
   syncPublicAvatar,
   withdrawRecipe,
 } from "./api.ts";
+import {
+  block,
+  follow,
+  getSocialStats,
+  listFollows,
+  listUserRecipes,
+  myBlocks,
+  relationsTo,
+  unblock,
+  unfollow,
+} from "./social.ts";
 
 // npm run test:unit 不带 --allow-env：没有权限就当作未开启，不报错。
 const canReadEnv = Deno.permissions.querySync({ name: "env" }).state === "granted";
@@ -281,6 +292,68 @@ Deno.test({
     } finally {
       if (privatePaths.length) await admin.storage.from("recipe-media").remove(privatePaths);
       await admin.auth.admin.deleteUser(a.id);
+    }
+  },
+});
+
+Deno.test({
+  name: "social api: follow / stats / block / report user",
+  ignore: !enabled,
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn: async () => {
+    assert(anonKey && serviceKey, "SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY 未设置");
+    const admin = createClient(url, serviceKey, noSession);
+    const a = await makeUser(admin, "sa");
+    const b = await makeUser(admin, "sb");
+    try {
+      // 关注两次都成功（第二次是主键冲突，按成功处理）
+      assert((await follow(b.client, b.id, a.id)).ok);
+      assert((await follow(b.client, b.id, a.id)).ok);
+      const s1 = await getSocialStats(b.client, a.id);
+      assert(s1.ok);
+      assertEquals(s1.value, { following: 0, followers: 1, iFollow: true, followsMe: false });
+
+      const fans = await listFollows(a.client, a.id, "followers");
+      assert(fans.ok);
+      assertEquals(fans.value.map((f) => f.userId), [b.id]);
+      const rel = await relationsTo(a.client, a.id, [b.id, a.id]);
+      assert(rel.ok);
+      assertEquals(rel.value.get(b.id), "followed_by");
+      assertEquals(rel.value.has(a.id), false);
+
+      // A 拉黑 B：B 的关注被删，B 再关注失败
+      assert((await block(a.client, a.id, b.id)).ok);
+      assert((await block(a.client, a.id, b.id)).ok);
+      const again = await follow(b.client, b.id, a.id);
+      assertEquals(again, { ok: false, reason: "unavailable" });
+      const s2 = await getSocialStats(a.client, a.id);
+      assert(s2.ok);
+      assertEquals(s2.value.followers, 0);
+      const blocks = await myBlocks(a.client, a.id);
+      assert(blocks.ok);
+      assertEquals(blocks.value, [b.id]);
+      const bSees = await myBlocks(b.client, b.id);
+      assert(bSees.ok);
+      assertEquals(bSees.value, []);
+
+      // 解除后可以再关注；取关
+      assert((await unblock(a.client, a.id, b.id)).ok);
+      assert((await follow(b.client, b.id, a.id)).ok);
+      assert((await unfollow(b.client, b.id, a.id)).ok);
+      assert((await unfollow(b.client, b.id, a.id)).ok);
+
+      // 举报用户两次都成功
+      assert((await report(b.client, b.id, { userId: a.id }, "unfriendly")).ok);
+      assert((await report(b.client, b.id, { userId: a.id }, "ad")).ok);
+
+      // 没发过菜 → 空列表
+      const recipes = await listUserRecipes(b.client, a.id);
+      assert(recipes.ok);
+      assertEquals(recipes.value, []);
+    } finally {
+      await admin.auth.admin.deleteUser(a.id);
+      await admin.auth.admin.deleteUser(b.id);
     }
   },
 });
